@@ -3,7 +3,7 @@ import { resolve } from 'path';
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin({ exclude: ['ssh2'] })],
+    plugins: [externalizeDepsPlugin()],
     build: {
       outDir: 'dist/main',
       rollupOptions: {
