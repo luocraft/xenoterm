@@ -213,10 +213,39 @@ export const useLayoutStore = create<LayoutStoreSlice>((set, get) => ({
       }
     }
 
+    // Sync the global layoutTree if the active tab is a workspace that was modified
+    let newLayoutTree = state.layoutTree;
+    let newActivePaneId = state.activePaneId;
+    const activeWs = newWorkspaces.find((w) => w.id === newActiveTabId);
+    if (activeWs) {
+      // Active tab is a workspace that still exists — sync its layout to global
+      newLayoutTree = activeWs.layoutTree;
+      // If the active pane was removed, pick the first leaf
+      const leaves = collectLeaves(newLayoutTree);
+      if (!leaves.some((l) => l.paneId === newActivePaneId)) {
+        newActivePaneId = getFirstLeaf(newLayoutTree).paneId;
+      }
+    } else if (newActiveTabId) {
+      // Active tab is a dissolved workspace or independent session
+      const sessionTab = newTabs.find(
+        (t) => t.type === 'session' && t.sessionId === newActiveTabId
+      );
+      if (sessionTab && sessionTab.type === 'session') {
+        const stablePaneId = `pane-${sessionTab.sessionId}`;
+        newLayoutTree = { type: 'leaf', paneId: stablePaneId, sessionId: sessionTab.sessionId };
+        newActivePaneId = stablePaneId;
+      }
+    } else {
+      newLayoutTree = null;
+      newActivePaneId = null;
+    }
+
     set({
       tabs: newTabs,
       workspaces: newWorkspaces,
       activeTabId: newActiveTabId,
+      layoutTree: newLayoutTree,
+      activePaneId: newActivePaneId,
     });
   },
 

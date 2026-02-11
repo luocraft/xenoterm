@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useAppStore } from '../store/app-store';
 import type { HostEntry, ConnectionGroup } from '../../shared/types';
 
@@ -31,6 +31,19 @@ export default function Sidebar({
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const contextMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close context menu on any click outside of it (including clicks in the terminal area)
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handleGlobalMouseDown = (e: MouseEvent) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+        setContextMenu(null);
+      }
+    };
+    document.addEventListener('mousedown', handleGlobalMouseDown, true);
+    return () => document.removeEventListener('mousedown', handleGlobalMouseDown, true);
+  }, [contextMenu]);
 
   const toggleGroup = useCallback((groupId: string) => {
     setExpandedGroups((prev) => {
@@ -80,7 +93,7 @@ export default function Sidebar({
     hosts.filter((h) => h.group === group.id);
 
   return (
-    <div className="h-full flex flex-col" onClick={closeContextMenu}>
+    <div className="h-full flex flex-col">
       {/* Header */}
       <div className="p-3 flex items-center justify-between" style={{ WebkitAppRegion: 'drag', borderBottom: '1px solid var(--color-border)' } as React.CSSProperties}>
         <h1 className="text-sm font-bold tracking-wide" style={{ color: 'var(--color-text-primary)' }}>SSH Client</h1>
@@ -177,6 +190,7 @@ export default function Sidebar({
       {/* Context menu */}
       {contextMenu && (
         <div
+          ref={contextMenuRef}
           className="fixed z-50 rounded-lg shadow-xl py-1 min-w-[140px]"
           style={{ left: contextMenu.x, top: contextMenu.y, backgroundColor: 'var(--color-context-bg)', border: '1px solid var(--color-border)' }}
         >
