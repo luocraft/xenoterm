@@ -1,0 +1,86 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-surface: #1a1b2e;
+  --color-surface-hover: #232440;
+  --color-surface-active: #2a2b4a;
+  --color-sidebar: #141525;
+  --color-accent: #6366f1;
+  --color-border: rgba(255, 255, 255, 0.05);
+  --color-text-primary: #e4e4e7;
+  --color-text-secondary: #a1a1aa;
+  --color-text-muted: #71717a;
+  --color-text-dim: #52525b;
+  --color-hover-bg: rgba(255, 255, 255, 0.05);
+  --color-context-bg: #1f2937;
+  --color-input-bg: rgba(255, 255, 255, 0.05);
+  --color-input-border: rgba(255, 255, 255, 0.1);
+  --color-overlay: rgba(0, 0, 0, 0.5);
+  --color-file-dir: #93c5fd;
+  --color-file-name: #d1d5db;
+}
+
+.light {
+  --color-surface: #d5dbd7;
+  --color-surface-hover: #c8ceca;
+  --color-surface-active: #bbc2bd;
+  --color-sidebar: #c2c8c5;
+  --color-accent: #4f46e5;
+  --color-border: rgba(0, 0, 0, 0.1);
+  --color-text-primary: #2e3532;
+  --color-text-secondary: #4c5953;
+  --color-text-muted: #7b8780;
+  --color-text-dim: #9ba5a0;
+  --color-hover-bg: rgba(0, 0, 0, 0.06);
+  --color-context-bg: #c2c8c5;
+  --color-input-bg: rgba(0, 0, 0, 0.05);
+  --color-input-border: rgba(0, 0, 0, 0.12);
+  --color-overlay: rgba(0, 0, 0, 0.3);
+  --color-file-dir: #2563eb;
+  --color-file-name: #374a40;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  overflow: hidden;
+  background-color: var(--color-surface);
+  color: var(--color-text-primary);
+}
+
+* {
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.2s ease-out;
+}
+
+/* Window drag regions */
+.app-drag {
+  -webkit-app-region: drag;
+}
+.app-no-drag {
+  -webkit-app-region: no-drag;
+}
+.xterm-viewport::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+.xterm-viewport {
+  scrollbar-width: none;
+}
