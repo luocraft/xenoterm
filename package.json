@@ -25,7 +25,8 @@
     },
     "files": [
       "dist/**/*",
-      "package.json"
+      "package.json",
+      "node_modules/**/*"
     ],
     "extraMetadata": {
       "main": "dist/main/index.js"
