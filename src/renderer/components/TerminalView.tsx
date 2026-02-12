@@ -80,7 +80,7 @@ function getLightTheme() {
 function getTerminalConfig(isDark: boolean) {
   return {
     fontFamily: "'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace",
-    fontSize: 14,
+    fontSize: 12,
     theme: isDark ? getDarkTheme() : getLightTheme(),
   };
 }
@@ -114,21 +114,26 @@ function getOrCreateTerminal(sessionId: string, isDark: boolean): CachedTerminal
 
   // Wire up IPC once — these persist for the session lifetime
   let lineBuffer = '';
+  let inAlternateScreen = false;
+
   const dataDisposable = terminal.onData((data) => {
     try {
-      if (data === '\r') {
-        if (lineBuffer.trim()) {
-          useAppStore.getState().addCommand(sessionId, lineBuffer);
+      // Only track commands when in normal screen (shell prompt), not in vim/nano/etc.
+      if (!inAlternateScreen) {
+        if (data === '\r') {
+          if (lineBuffer.trim()) {
+            useAppStore.getState().addCommand(sessionId, lineBuffer);
+          }
+          lineBuffer = '';
+        } else if (data === '\x7f' || data === '\b') {
+          lineBuffer = lineBuffer.slice(0, -1);
+        } else if (data === '\x03') {
+          lineBuffer = '';
+        } else if (data.length === 1 && data.charCodeAt(0) >= 32) {
+          lineBuffer += data;
+        } else if (data.length > 1 && !data.startsWith('\x1b')) {
+          lineBuffer += data;
         }
-        lineBuffer = '';
-      } else if (data === '\x7f' || data === '\b') {
-        lineBuffer = lineBuffer.slice(0, -1);
-      } else if (data === '\x03') {
-        lineBuffer = '';
-      } else if (data.length === 1 && data.charCodeAt(0) >= 32) {
-        lineBuffer += data;
-      } else if (data.length > 1 && !data.startsWith('\x1b')) {
-        lineBuffer += data;
       }
     } catch (e) {
       console.error('[Terminal] Command tracking error:', e);
@@ -137,6 +142,15 @@ function getOrCreateTerminal(sessionId: string, isDark: boolean): CachedTerminal
   });
 
   const unsubData = window.api.ssh.onData(sessionId, (data) => {
+    // Detect alternate screen buffer enter/exit
+    if (data.includes('\x1b[?1049h') || data.includes('\x1b[?47h') || data.includes('\x1b[?1047h')) {
+      inAlternateScreen = true;
+      lineBuffer = '';
+    }
+    if (data.includes('\x1b[?1049l') || data.includes('\x1b[?47l') || data.includes('\x1b[?1047l')) {
+      inAlternateScreen = false;
+      lineBuffer = '';
+    }
     terminal.write(data);
   });
   const unsubClose = window.api.ssh.onClose(sessionId, () => {
@@ -225,11 +239,19 @@ export default function TerminalView({ sessionId }: TerminalViewProps) {
     };
     container.addEventListener('keydown', handleKeyDown);
 
-    // Cleanup: only remove per-mount resources (resize observer, keydown).
-    // IPC listeners and terminal.onData stay alive.
+    // Right-click paste
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+      navigator.clipboard.readText().then((text) => {
+        if (text) window.api.ssh.write(sessionId, text);
+      });
+    };
+    container.addEventListener('contextmenu', handleContextMenu);
+
     return () => {
       resizeObserver.disconnect();
       container.removeEventListener('keydown', handleKeyDown);
+      container.removeEventListener('contextmenu', handleContextMenu);
     };
   }, [sessionId, appTheme]);
 

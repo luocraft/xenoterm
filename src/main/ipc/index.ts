@@ -1,14 +1,20 @@
 import { ipcMain, dialog, BrowserWindow } from 'electron';
-import type { HostEntry, AppConfig } from '../../shared/types';
+import type { HostEntry, AppConfig, NetProtocol, SerialConfig } from '../../shared/types';
+import { join } from 'path';
+import { existsSync } from 'fs';
 import { ConfigStore } from '../services/config-store';
 import { ConnectionManager } from '../services/connection-manager';
 import { SSHService } from '../services/ssh-service';
 import { SFTPService } from '../services/sftp-service';
+import { NetDebugService } from '../services/net-debug-service';
+import { SerialService } from '../services/serial-service';
 
 const configStore = new ConfigStore();
 const connectionManager = new ConnectionManager(configStore);
 const sshService = new SSHService();
 const sftpService = new SFTPService();
+const netDebugService = new NetDebugService();
+const serialService = new SerialService();
 
 // Wire up host resolver for jump host support
 sshService.setHostResolver((id) => connectionManager.getHost(id));
@@ -305,5 +311,109 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('local:getHomePath', async () => {
     const { homedir } = await import('os');
     return homedir();
+  });
+
+  // === Net Debug handlers ===
+  ipcMain.handle('net:create', async (_event, protocol: NetProtocol, host: string, port: number, localPort?: number) => {
+    try {
+      const session = await netDebugService.createSession(protocol, host, port, localPort);
+      const win = getMainWindow();
+
+      netDebugService.onData(session.id, (data, remote) => {
+        win?.webContents.send('net:data', session.id, data.toString('hex'), remote);
+      });
+
+      netDebugService.onClose(session.id, () => {
+        win?.webContents.send('net:close', session.id);
+      });
+
+      netDebugService.onError(session.id, (error) => {
+        win?.webContents.send('net:error', session.id, error);
+      });
+
+      netDebugService.onClientChange(session.id, (clients) => {
+        win?.webContents.send('net:clients', session.id, clients);
+      });
+
+      return session;
+    } catch (err) {
+      throw new Error(`Net debug failed: ${(err as Error).message}`);
+    }
+  });
+
+  ipcMain.handle('net:close', async (_event, sessionId: string) => {
+    netDebugService.close(sessionId);
+  });
+
+  ipcMain.on('net:send', (_event, sessionId: string, hexData: string, remoteAddress?: string) => {
+    const buf = Buffer.from(hexData, 'hex');
+    netDebugService.send(sessionId, buf, remoteAddress);
+  });
+
+  // === Help handler ===
+  ipcMain.on('help:open', () => {
+    const { shell, app } = require('electron');
+    const candidates = [
+      join(app.getAppPath(), 'help.html'),
+      join(process.resourcesPath || '', 'help.html'),
+      join(__dirname, '../../help.html'),
+      join(__dirname, '../../../help.html'),
+    ];
+    for (const p of candidates) {
+      if (existsSync(p)) {
+        shell.openPath(p);
+        return;
+      }
+    }
+    shell.openPath(join(app.getAppPath(), 'help.html'));
+  });
+
+  // === Serial Port handlers ===
+  ipcMain.handle('serial:list', async () => {
+    try {
+      return await serialService.listPorts();
+    } catch (err) {
+      throw new Error(`Failed to list serial ports: ${(err as Error).message}`);
+    }
+  });
+
+  ipcMain.handle('serial:open', async (_event, config: SerialConfig) => {
+    try {
+      const session = await serialService.open(config);
+      const win = getMainWindow();
+
+      serialService.onData(session.id, (data) => {
+        win?.webContents.send('serial:data', session.id, data.toString('hex'));
+      });
+
+      serialService.onClose(session.id, () => {
+        win?.webContents.send('serial:close', session.id);
+      });
+
+      serialService.onError(session.id, (error) => {
+        win?.webContents.send('serial:error', session.id, error);
+      });
+
+      return session;
+    } catch (err) {
+      throw new Error(`Failed to open serial port: ${(err as Error).message}`);
+    }
+  });
+
+  ipcMain.handle('serial:close', async (_event, sessionId: string) => {
+    serialService.close(sessionId);
+  });
+
+  ipcMain.on('serial:write', (_event, sessionId: string, hexData: string) => {
+    const buf = Buffer.from(hexData, 'hex');
+    serialService.write(sessionId, buf);
+  });
+
+  ipcMain.on('serial:setDTR', (_event, sessionId: string, value: boolean) => {
+    serialService.setDTR(sessionId, value);
+  });
+
+  ipcMain.on('serial:setRTS', (_event, sessionId: string, value: boolean) => {
+    serialService.setRTS(sessionId, value);
   });
 }

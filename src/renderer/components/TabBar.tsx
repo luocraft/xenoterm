@@ -141,9 +141,10 @@ export default function TabBar() {
   };
 
   return (
+    <div className="flex-shrink-0" style={{ borderBottom: '1px solid var(--color-border)' }}>
     <div
-      className="app-drag flex items-center bg-[var(--color-sidebar)] h-9 px-1 gap-0.5 flex-shrink-0"
-      style={{ borderBottom: '1px solid var(--color-border)' }}
+      className="app-drag flex items-center bg-[var(--color-sidebar)] h-9 px-1 gap-0.5"
+      style={{ paddingRight: '140px' }}
     >
       {sidebarCollapsed && (
         <button
@@ -189,13 +190,14 @@ export default function TabBar() {
                 onDrop={(e) => handleTabDrop(e, sid, 'session')}
                 onClick={() => handleTabClick(sid)}
                 className={`
-                  flex items-center gap-1.5 px-3 py-1 rounded-t-md cursor-grab
-                  text-xs transition-colors min-w-0 max-w-[180px] group select-none
+                  flex items-center gap-1.5 px-3 py-1 cursor-grab
+                  text-[11px] transition-all min-w-0 max-w-[180px] group select-none
+                  rounded-md mx-0.5
                   ${dropTargetId === sid ? 'ring-2 ring-emerald-400/60 bg-emerald-400/10' : ''}
                 `}
                 style={{
                   ...(isActive
-                    ? { backgroundColor: 'var(--color-surface)', color: 'var(--color-text-primary)' }
+                    ? { backgroundColor: 'var(--color-surface)', color: 'var(--color-text-primary)', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }
                     : { color: 'var(--color-text-muted)' }),
                 }}
                 onMouseEnter={(e) => { if (!isActive) { e.currentTarget.style.backgroundColor = 'var(--color-hover-bg)'; e.currentTarget.style.color = 'var(--color-text-secondary)'; } }}
@@ -205,8 +207,8 @@ export default function TabBar() {
                 <span className="truncate">{getSessionLabel(sid)}</span>
                 <button
                   onClick={(e) => handleCloseSession(e, sid)}
-                  className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-                  style={{ color: 'var(--color-text-dim)' }}
+                  className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 hover:text-red-400"
+                  style={{ color: 'var(--color-text-dim)', fontSize: '13px', lineHeight: 1 }}
                 >
                   ×
                 </button>
@@ -227,13 +229,14 @@ export default function TabBar() {
               onDrop={(e) => handleTabDrop(e, ws.id, 'workspace')}
               onClick={() => handleTabClick(ws.id)}
               className={`
-                flex items-center gap-1.5 px-3 py-1 rounded-t-md cursor-pointer
-                text-xs transition-colors min-w-0 max-w-[200px] group select-none
+                flex items-center gap-1.5 px-3 py-1 cursor-pointer
+                text-[11px] transition-all min-w-0 max-w-[200px] group select-none
+                rounded-md mx-0.5
                 ${dropTargetId === ws.id ? 'ring-2 ring-emerald-400/60 bg-emerald-400/10' : ''}
               `}
               style={{
                 ...(isActive
-                  ? { backgroundColor: 'var(--color-surface)', color: 'var(--color-text-primary)' }
+                  ? { backgroundColor: 'var(--color-surface)', color: 'var(--color-text-primary)', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }
                   : { color: 'var(--color-text-muted)' }),
               }}
               onMouseEnter={(e) => { if (!isActive) { e.currentTarget.style.backgroundColor = 'var(--color-hover-bg)'; e.currentTarget.style.color = 'var(--color-text-secondary)'; } }}
@@ -243,8 +246,8 @@ export default function TabBar() {
               <span className="truncate">{ws.name} ({ws.sessionIds.length})</span>
               <button
                 onClick={(e) => handleCloseWorkspace(e, ws.id)}
-                className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-                style={{ color: 'var(--color-text-dim)' }}
+                className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 hover:text-red-400"
+                style={{ color: 'var(--color-text-dim)', fontSize: '13px', lineHeight: 1 }}
               >
                 ×
               </button>
@@ -280,34 +283,7 @@ export default function TabBar() {
           </button>
         </>
       )}
-
-      {/* Window controls */}
-      <div className="app-no-drag flex items-center">
-        <button
-          onClick={() => window.api.window?.minimize?.()}
-          className="w-[46px] h-9 flex items-center justify-center hover:bg-[var(--color-hover-bg)] transition-colors"
-          style={{ color: 'var(--color-text-muted)' }}
-          title="Minimize"
-        >
-          <svg width="10" height="1" viewBox="0 0 10 1"><rect width="10" height="1" fill="currentColor"/></svg>
-        </button>
-        <button
-          onClick={() => window.api.window?.maximize?.()}
-          className="w-[46px] h-9 flex items-center justify-center hover:bg-[var(--color-hover-bg)] transition-colors"
-          style={{ color: 'var(--color-text-muted)' }}
-          title="Maximize"
-        >
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><rect x="0.5" y="0.5" width="9" height="9" stroke="currentColor" strokeWidth="1"/></svg>
-        </button>
-        <button
-          onClick={() => window.api.window?.close?.()}
-          className="w-[46px] h-9 flex items-center justify-center hover:bg-red-500/80 hover:text-white transition-colors"
-          style={{ color: 'var(--color-text-muted)' }}
-          title="Close"
-        >
-          <svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" strokeWidth="1.2"/></svg>
-        </button>
-      </div>
+    </div>
     </div>
   );
 }

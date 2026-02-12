@@ -84,3 +84,8 @@ body {
 .xterm-viewport {
   scrollbar-width: none;
 }
+
+/* Hide the blue cursor outline on unfocused terminals */
+.xterm-cursor-outline {
+  outline: none !important;
+}

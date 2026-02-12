@@ -5,7 +5,12 @@ import type {
   FileEntry,
   TransferProgress,
   AppConfig,
-  ImportResult
+  ImportResult,
+  NetSession,
+  NetProtocol,
+  SerialConfig,
+  SerialSession,
+  SerialPortInfo
 } from '../shared/types';
 
 const api = {
@@ -97,6 +102,80 @@ const api = {
     minimize: (): void => ipcRenderer.send('window:minimize'),
     maximize: (): void => ipcRenderer.send('window:maximize'),
     close: (): void => ipcRenderer.send('window:close')
+  },
+  help: {
+    open: (): void => ipcRenderer.send('help:open')
+  },
+  net: {
+    create: (protocol: NetProtocol, host: string, port: number, localPort?: number): Promise<NetSession> =>
+      ipcRenderer.invoke('net:create', protocol, host, port, localPort),
+    close: (sessionId: string): Promise<void> =>
+      ipcRenderer.invoke('net:close', sessionId),
+    send: (sessionId: string, hexData: string, remoteAddress?: string): void =>
+      ipcRenderer.send('net:send', sessionId, hexData, remoteAddress),
+    onData: (sessionId: string, callback: (hexData: string, remote?: string) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, sid: string, data: string, remote?: string) => {
+        if (sid === sessionId) callback(data, remote);
+      };
+      ipcRenderer.on('net:data', handler);
+      return () => ipcRenderer.removeListener('net:data', handler);
+    },
+    onClose: (sessionId: string, callback: () => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, sid: string) => {
+        if (sid === sessionId) callback();
+      };
+      ipcRenderer.on('net:close', handler);
+      return () => ipcRenderer.removeListener('net:close', handler);
+    },
+    onError: (sessionId: string, callback: (error: string) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, sid: string, error: string) => {
+        if (sid === sessionId) callback(error);
+      };
+      ipcRenderer.on('net:error', handler);
+      return () => ipcRenderer.removeListener('net:error', handler);
+    },
+    onClients: (sessionId: string, callback: (clients: string[]) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, sid: string, clients: string[]) => {
+        if (sid === sessionId) callback(clients);
+      };
+      ipcRenderer.on('net:clients', handler);
+      return () => ipcRenderer.removeListener('net:clients', handler);
+    }
+  },
+  serial: {
+    list: (): Promise<SerialPortInfo[]> =>
+      ipcRenderer.invoke('serial:list'),
+    open: (config: SerialConfig): Promise<SerialSession> =>
+      ipcRenderer.invoke('serial:open', config),
+    close: (sessionId: string): Promise<void> =>
+      ipcRenderer.invoke('serial:close', sessionId),
+    write: (sessionId: string, hexData: string): void =>
+      ipcRenderer.send('serial:write', sessionId, hexData),
+    setDTR: (sessionId: string, value: boolean): void =>
+      ipcRenderer.send('serial:setDTR', sessionId, value),
+    setRTS: (sessionId: string, value: boolean): void =>
+      ipcRenderer.send('serial:setRTS', sessionId, value),
+    onData: (sessionId: string, callback: (hexData: string) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, sid: string, data: string) => {
+        if (sid === sessionId) callback(data);
+      };
+      ipcRenderer.on('serial:data', handler);
+      return () => ipcRenderer.removeListener('serial:data', handler);
+    },
+    onClose: (sessionId: string, callback: () => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, sid: string) => {
+        if (sid === sessionId) callback();
+      };
+      ipcRenderer.on('serial:close', handler);
+      return () => ipcRenderer.removeListener('serial:close', handler);
+    },
+    onError: (sessionId: string, callback: (error: string) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, sid: string, error: string) => {
+        if (sid === sessionId) callback(error);
+      };
+      ipcRenderer.on('serial:error', handler);
+      return () => ipcRenderer.removeListener('serial:error', handler);
+    }
   }
 };
 

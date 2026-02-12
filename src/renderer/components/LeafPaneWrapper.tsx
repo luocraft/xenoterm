@@ -13,6 +13,7 @@ interface LeafPaneWrapperProps {
 
 export default function LeafPaneWrapper({ paneId, sessionId }: LeafPaneWrapperProps) {
   const [isDragOver, setIsDragOver] = useState(false);
+  const paneRef = React.useRef<HTMLDivElement>(null);
 
   const activeTabId = useLayoutStore((s) => s.activeTabId);
   const activePaneId = useLayoutStore((s) => s.activePaneId);
@@ -39,8 +40,8 @@ export default function LeafPaneWrapper({ paneId, sessionId }: LeafPaneWrapperPr
   const handleClick = () => {
     useLayoutStore.getState().setActivePaneId(paneId);
     useAppStore.getState().setActiveSession(sessionId);
-    // Focus the terminal textarea so it can receive keyboard input
-    const textarea = document.querySelector('.xterm-helper-textarea') as HTMLTextAreaElement | null;
+    // Focus the terminal textarea within THIS pane so it can receive keyboard input
+    const textarea = paneRef.current?.querySelector('.xterm-helper-textarea') as HTMLTextAreaElement | null;
     if (textarea) textarea.focus();
   };
 
@@ -122,6 +123,7 @@ export default function LeafPaneWrapper({ paneId, sessionId }: LeafPaneWrapperPr
 
   return (
     <div
+      ref={paneRef}
       onClick={handleClick}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}

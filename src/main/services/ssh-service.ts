@@ -77,7 +77,7 @@ export class SSHService {
       host: hostEntry.hostname,
       port: hostEntry.port,
       username: hostEntry.username,
-      readyTimeout: 30000,
+      readyTimeout: 2000,
       keepaliveInterval: (hostEntry.keepAliveInterval || 60) * 1000,
       keepaliveCountMax: 3
     };
@@ -102,8 +102,8 @@ export class SSHService {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         entry.client.end();
-        reject(new Error('Connection timeout: exceeded 30 seconds'));
-      }, 30000);
+        reject(new Error('Connection timeout: exceeded 2 seconds'));
+      }, 2000);
 
       entry.client
         .on('ready', () => {

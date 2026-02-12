@@ -10,20 +10,39 @@ import ConnectionForm from './components/ConnectionForm';
 import ImportExportDialog from './components/ImportExportDialog';
 import ToastContainer from './components/Toast';
 import CommandHistory from './components/CommandHistory';
+import NetDebugPanel from './components/NetDebugPanel';
+import SerialDebugPanel from './components/SerialDebugPanel';
 import { useLayoutStore } from './store/layout-store';
 import type { HostEntry } from '../shared/types';
 
 function WelcomeScreen() {
   return (
     <div className="flex-1 flex items-center justify-center" style={{ color: 'var(--color-text-muted)' }}>
-      <div className="text-center">
-        <div className="text-6xl mb-5 opacity-20">⌨</div>
-        <p className="text-lg font-medium" style={{ color: 'var(--color-text-secondary)' }}>SSH Client</p>
-        <p className="text-sm mt-1.5" style={{ color: 'var(--color-text-muted)' }}>
-          Select a connection from the sidebar to get started
-        </p>
-        <p className="text-xs mt-4" style={{ color: 'var(--color-text-dim)' }}>
-          Double-click a connection or right-click → Connect
+      <div className="text-center max-w-md">
+        <div className="text-5xl mb-6 opacity-30">⌨</div>
+        <p className="text-xl font-semibold mb-1" style={{ color: 'var(--color-text-primary)' }}>XenoTerm</p>
+        <p className="text-xs mb-8" style={{ color: 'var(--color-text-dim)' }}>SSH · Network · Serial — All in one</p>
+
+        <div className="grid grid-cols-3 gap-3 text-left">
+          <div className="p-3 rounded-xl" style={{ backgroundColor: 'var(--color-hover-bg)', border: '1px solid var(--color-border)' }}>
+            <div className="text-lg mb-1.5">🖥</div>
+            <p className="text-xs font-medium mb-0.5" style={{ color: 'var(--color-text-secondary)' }}>SSH Terminal</p>
+            <p className="text-[10px] leading-relaxed" style={{ color: 'var(--color-text-dim)' }}>Connect to remote servers with split-pane workspaces</p>
+          </div>
+          <div className="p-3 rounded-xl" style={{ backgroundColor: 'var(--color-hover-bg)', border: '1px solid var(--color-border)' }}>
+            <div className="text-lg mb-1.5">🔌</div>
+            <p className="text-xs font-medium mb-0.5" style={{ color: 'var(--color-text-secondary)' }}>Network Debug</p>
+            <p className="text-[10px] leading-relaxed" style={{ color: 'var(--color-text-dim)' }}>TCP Client/Server and UDP data exchange</p>
+          </div>
+          <div className="p-3 rounded-xl" style={{ backgroundColor: 'var(--color-hover-bg)', border: '1px solid var(--color-border)' }}>
+            <div className="text-lg mb-1.5">⚡</div>
+            <p className="text-xs font-medium mb-0.5" style={{ color: 'var(--color-text-secondary)' }}>Serial Debug</p>
+            <p className="text-[10px] leading-relaxed" style={{ color: 'var(--color-text-dim)' }}>Serial port communication with DTR/RTS control</p>
+          </div>
+        </div>
+
+        <p className="text-[10px] mt-6" style={{ color: 'var(--color-text-dim)' }}>
+          Double-click a connection or use the toolbar below
         </p>
       </div>
     </div>
@@ -93,6 +112,11 @@ export default function App() {
   const [editingHost, setEditingHost] = useState<HostEntry | null>(null);
   const [showImportExport, setShowImportExport] = useState(false);
   const [passwordPrompt, setPasswordPrompt] = useState<{ hostId: string; hostName: string } | null>(null);
+  const [showNetDebug, setShowNetDebug] = useState(false);
+  const [showSerialDebug, setShowSerialDebug] = useState(false);
+  const [connectError, setConnectError] = useState<string | null>(null);
+  const [sidePanelWidth, setSidePanelWidth] = useState(400);
+  const [isDraggingSidePanel, setIsDraggingSidePanel] = useState(false);
 
   const connectToHost = useAppStore((s) => s.connectToHost);
   const hosts = useAppStore((s) => s.hosts);
@@ -131,7 +155,8 @@ export default function App() {
         addedSessionIdsRef.current.add(newSession.id);
       }
     } catch (err) {
-      console.error('Connection failed:', err);
+      const msg = err instanceof Error ? err.message : String(err);
+      setConnectError(msg);
     }
   };
 
@@ -234,6 +259,22 @@ export default function App() {
     };
   }, [isDraggingDivider, setSplitPaneRatio]);
 
+  // Side panel horizontal drag
+  useEffect(() => {
+    if (!isDraggingSidePanel) return;
+    const handleMouseMove = (e: MouseEvent) => {
+      const newWidth = window.innerWidth - e.clientX;
+      setSidePanelWidth(Math.min(800, Math.max(250, newWidth)));
+    };
+    const handleMouseUp = () => setIsDraggingSidePanel(false);
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDraggingSidePanel]);
+
   const hasContent = isWorkspaceView || isIndependentSession;
 
   return (
@@ -245,13 +286,27 @@ export default function App() {
             onEditConnection={(host: HostEntry) => { setEditingHost(host); setShowConnectionForm(true); }}
             onImportExport={() => setShowImportExport(true)}
             onConnect={handleConnect}
+            onNetDebug={() => { setShowNetDebug((v) => !v); setShowSerialDebug(false); }}
+            onSerialDebug={() => { setShowSerialDebug((v) => !v); setShowNetDebug(false); }}
           />
         }
       >
         <TabBar />
 
         {!hasContent ? (
-          <WelcomeScreen />
+          <div className="flex-1 flex overflow-visible">
+            {showNetDebug ? (
+              <div className="flex-1 overflow-visible">
+                <NetDebugPanel onClose={() => setShowNetDebug(false)} />
+              </div>
+            ) : showSerialDebug ? (
+              <div className="flex-1 overflow-visible">
+                <SerialDebugPanel onClose={() => setShowSerialDebug(false)} />
+              </div>
+            ) : (
+              <WelcomeScreen />
+            )}
+          </div>
         ) : (
           <div className="flex-1 flex overflow-hidden">
             {/* Main terminal + file manager area */}
@@ -297,6 +352,40 @@ export default function App() {
                 <CommandHistory onClose={toggleCommandHistory} />
               </div>
             )}
+
+            {/* Net debug side panel */}
+            {showNetDebug && (
+              <>
+                <div
+                  onMouseDown={(e) => { e.preventDefault(); setIsDraggingSidePanel(true); }}
+                  className="flex-shrink-0 w-1 cursor-col-resize transition-colors"
+                  style={{ backgroundColor: isDraggingSidePanel ? 'var(--color-accent)' : 'var(--color-border)' }}
+                />
+                <div
+                  className="flex-shrink-0 overflow-hidden"
+                  style={{ width: sidePanelWidth }}
+                >
+                  <NetDebugPanel onClose={() => setShowNetDebug(false)} />
+                </div>
+              </>
+            )}
+
+            {/* Serial debug side panel */}
+            {showSerialDebug && (
+              <>
+                <div
+                  onMouseDown={(e) => { e.preventDefault(); setIsDraggingSidePanel(true); }}
+                  className="flex-shrink-0 w-1 cursor-col-resize transition-colors"
+                  style={{ backgroundColor: isDraggingSidePanel ? 'var(--color-accent)' : 'var(--color-border)' }}
+                />
+                <div
+                  className="flex-shrink-0 overflow-hidden"
+                  style={{ width: sidePanelWidth }}
+                >
+                  <SerialDebugPanel onClose={() => setShowSerialDebug(false)} />
+                </div>
+              </>
+            )}
           </div>
         )}
       </MainLayout>
@@ -316,6 +405,30 @@ export default function App() {
           onSubmit={handlePasswordSubmit}
           onCancel={() => setPasswordPrompt(null)}
         />
+      )}
+
+      {connectError && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: 'var(--color-overlay)' }} onClick={() => setConnectError(null)}>
+          <div
+            className="rounded-xl shadow-2xl w-[360px] p-5"
+            style={{ backgroundColor: 'var(--color-sidebar)', border: '1px solid var(--color-input-border)' }}
+            onClick={(e: React.MouseEvent) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-lg">❌</span>
+              <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>Connection Failed</h3>
+            </div>
+            <p className="text-xs mb-4 leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>{connectError}</p>
+            <div className="flex justify-end">
+              <button
+                onClick={() => setConnectError(null)}
+                className="px-4 py-1.5 text-xs rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 transition-opacity"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <ToastContainer />
