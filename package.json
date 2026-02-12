@@ -30,7 +30,13 @@
     "extraMetadata": {
       "main": "dist/main/index.js"
     },
-    "asar": false,
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/ssh2/**/*",
+      "node_modules/serialport/**/*",
+      "node_modules/@serialport/**/*"
+    ],
+    "npmRebuild": true,
     "extraResources": [
       {
         "from": "help.html",
