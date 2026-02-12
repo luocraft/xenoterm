@@ -25,6 +25,7 @@ export interface AppStore {
   splitPaneVisible: boolean;
   splitPaneRatio: number;
   commandHistoryVisible: boolean;
+  timestampGutterVisible: boolean;
 
   // Command history: global list of commands (persisted, max 100)
   commandHistory: { cmd: string; ts: number; hostName?: string }[];
@@ -53,6 +54,7 @@ export interface AppStore {
   toggleSidebar: () => void;
   toggleSplitPane: () => void;
   toggleCommandHistory: () => void;
+  toggleTimestampGutter: () => void;
   setSplitPaneRatio: (ratio: number) => void;
   loadAppConfig: () => Promise<void>;
   addCommand: (sessionId: string, cmd: string) => void;
@@ -72,6 +74,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   splitPaneVisible: false,
   splitPaneRatio: 0.5,
   commandHistoryVisible: false,
+  timestampGutterVisible: false,
   commandHistory: [],
 
   // Connection actions
@@ -224,6 +227,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   toggleCommandHistory: () =>
     set((state) => ({ commandHistoryVisible: !state.commandHistoryVisible })),
+
+  toggleTimestampGutter: () =>
+    set((state) => ({ timestampGutterVisible: !state.timestampGutterVisible })),
 
   setSplitPaneRatio: (ratio) => set({ splitPaneRatio: ratio }),
 

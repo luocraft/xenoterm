@@ -350,6 +350,28 @@ export function registerIpcHandlers(): void {
     netDebugService.send(sessionId, buf, remoteAddress);
   });
 
+  // === Recording (stream to file) handlers ===
+  const recordingStreams = new Map<string, import('fs').WriteStream>();
+
+  ipcMain.handle('recording:start', async (_event, filePath: string, recordingId: string) => {
+    const { createWriteStream } = await import('fs');
+    const ws = createWriteStream(filePath, { flags: 'w', encoding: 'utf-8' });
+    recordingStreams.set(recordingId, ws);
+  });
+
+  ipcMain.on('recording:write', (_event, recordingId: string, line: string) => {
+    const ws = recordingStreams.get(recordingId);
+    if (ws) ws.write(line + '\n');
+  });
+
+  ipcMain.handle('recording:stop', async (_event, recordingId: string) => {
+    const ws = recordingStreams.get(recordingId);
+    if (ws) {
+      await new Promise<void>((resolve) => ws.end(resolve));
+      recordingStreams.delete(recordingId);
+    }
+  });
+
   // === Help handler ===
   ipcMain.on('help:open', () => {
     const { shell, app } = require('electron');

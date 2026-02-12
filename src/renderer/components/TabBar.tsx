@@ -14,6 +14,8 @@ export default function TabBar() {
   const splitPaneVisible = useAppStore((s) => s.splitPaneVisible);
   const toggleCommandHistory = useAppStore((s) => s.toggleCommandHistory);
   const commandHistoryVisible = useAppStore((s) => s.commandHistoryVisible);
+  const toggleTimestampGutter = useAppStore((s) => s.toggleTimestampGutter);
+  const timestampGutterVisible = useAppStore((s) => s.timestampGutterVisible);
 
   const tabs = useLayoutStore((s) => s.tabs);
   const activeTabId = useLayoutStore((s) => s.activeTabId);
@@ -261,6 +263,16 @@ export default function TabBar() {
 
       {sessions.length > 0 && (
         <>
+          <button
+            onClick={toggleTimestampGutter}
+            className={`app-no-drag px-2 py-1 text-xs rounded transition-colors ${
+              timestampGutterVisible ? 'text-[var(--color-accent)]' : ''
+            }`}
+            style={{ color: timestampGutterVisible ? undefined : 'var(--color-text-muted)' }}
+            title={timestampGutterVisible ? 'Hide timestamps' : 'Show timestamps'}
+          >
+            🕑
+          </button>
           <button
             onClick={toggleCommandHistory}
             className={`app-no-drag px-2 py-1 text-xs rounded transition-colors ${

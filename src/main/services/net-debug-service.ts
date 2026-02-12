@@ -179,6 +179,8 @@ export class NetDebugService {
       };
       this.sessions.set(session.id, entry);
 
+      let bound = false;
+
       socket.on('message', (msg, rinfo) => {
         const remote = `${rinfo.address}:${rinfo.port}`;
         entry.dataCallbacks.forEach((cb) => cb(msg, remote));
@@ -188,6 +190,9 @@ export class NetDebugService {
         session.status = 'error';
         session.error = err.message;
         entry.errorCallbacks.forEach((cb) => cb(err.message));
+        if (!bound) {
+          reject(err);
+        }
       });
 
       socket.on('close', () => {
@@ -197,6 +202,7 @@ export class NetDebugService {
 
       const bindPort = session.localPort || 0;
       socket.bind(bindPort, () => {
+        bound = true;
         session.status = 'connected';
         session.localPort = socket.address().port;
         resolve(session);

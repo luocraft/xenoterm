@@ -106,6 +106,14 @@ const api = {
   help: {
     open: (): void => ipcRenderer.send('help:open')
   },
+  recording: {
+    start: (filePath: string, recordingId: string): Promise<void> =>
+      ipcRenderer.invoke('recording:start', filePath, recordingId),
+    write: (recordingId: string, line: string): void =>
+      ipcRenderer.send('recording:write', recordingId, line),
+    stop: (recordingId: string): Promise<void> =>
+      ipcRenderer.invoke('recording:stop', recordingId),
+  },
   net: {
     create: (protocol: NetProtocol, host: string, port: number, localPort?: number): Promise<NetSession> =>
       ipcRenderer.invoke('net:create', protocol, host, port, localPort),

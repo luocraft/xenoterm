@@ -161,23 +161,23 @@ export default function ConnectionForm({ editHost, onClose }: ConnectionFormProp
 
           <Field label="Name" error={errors.name}>
             <input className={inputClass('name')} style={inputStyle('name')} value={form.name}
-              onChange={(e) => set('name', e.target.value)} placeholder="My Server" />
+              onChange={(e) => set('name', e.target.value)} />
           </Field>
 
           <div className="grid grid-cols-3 gap-2">
             <Field label="Hostname" error={errors.hostname} className="col-span-2">
               <input className={inputClass('hostname')} style={inputStyle('hostname')} value={form.hostname}
-                onChange={(e) => set('hostname', e.target.value)} placeholder="192.168.1.1" />
+                onChange={(e) => set('hostname', e.target.value)} />
             </Field>
             <Field label="Port" error={errors.port}>
               <input className={inputClass('port')} style={inputStyle('port')} value={form.port}
-                onChange={(e) => set('port', e.target.value)} placeholder="22" />
+                onChange={(e) => set('port', e.target.value)} />
             </Field>
           </div>
 
           <Field label="Username" error={errors.username}>
             <input className={inputClass('username')} style={inputStyle('username')} value={form.username}
-              onChange={(e) => set('username', e.target.value)} placeholder="root" />
+              onChange={(e) => set('username', e.target.value)} />
           </Field>
 
           <Field label="Auth Method">
@@ -197,7 +197,7 @@ export default function ConnectionForm({ editHost, onClose }: ConnectionFormProp
               <Field label="Private Key" error={errors.privateKeyPath}>
                 <div className="flex gap-1">
                   <input className={`${inputClass('privateKeyPath')} flex-1`} style={inputStyle('privateKeyPath')} value={form.privateKeyPath}
-                    onChange={(e) => set('privateKeyPath', e.target.value)} placeholder="/path/to/key" readOnly />
+                    onChange={(e) => set('privateKeyPath', e.target.value)} readOnly />
                   <button type="button" onClick={handleSelectKey}
                     className="px-2 py-1 text-xs rounded-lg transition-colors"
                     style={{ backgroundColor: 'var(--color-input-bg)', color: 'var(--color-text-secondary)' }}>
@@ -207,7 +207,7 @@ export default function ConnectionForm({ editHost, onClose }: ConnectionFormProp
               </Field>
               <Field label="Passphrase">
                 <input type="password" className={inputClass('passphrase')} style={inputStyle('passphrase')} value={form.passphrase}
-                  onChange={(e) => set('passphrase', e.target.value)} placeholder="Optional" />
+                  onChange={(e) => set('passphrase', e.target.value)} />
               </Field>
             </>
           )}
@@ -234,7 +234,7 @@ export default function ConnectionForm({ editHost, onClose }: ConnectionFormProp
 
           <Field label="Keep-Alive (sec)" error={errors.keepAliveInterval}>
             <input className={inputClass('keepAliveInterval')} style={inputStyle('keepAliveInterval')} value={form.keepAliveInterval}
-              onChange={(e) => set('keepAliveInterval', e.target.value)} placeholder="60" />
+              onChange={(e) => set('keepAliveInterval', e.target.value)} />
           </Field>
 
           <div className="flex justify-end gap-2 pt-2">

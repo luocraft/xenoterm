@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
@@ -8,19 +8,25 @@ interface TerminalViewProps {
   sessionId: string;
 }
 
-/**
- * Persistent terminal entry: terminal instance + IPC wiring live for the
- * entire lifetime of the SSH session, independent of React mount/unmount.
- * The React component only moves the wrapper DOM node into its container
- * and handles fit/focus.
- */
 interface CachedTerminal {
   terminal: Terminal;
   fitAddon: FitAddon;
   wrapper: HTMLDivElement;
   initialized: boolean;
-  /** IPC cleanup — called only when the session is disposed */
   ipcCleanup: (() => void) | null;
+  /** Timestamp gutter state */
+  gutter: {
+    /** Time string per absolute line index (scrollback + viewport) */
+    lineTimestamps: string[];
+    /** The gutter canvas element */
+    canvas: HTMLCanvasElement;
+    /** Last known viewport top row for scroll sync */
+    lastViewportTop: number;
+    /** Render function — called on scroll, data, resize */
+    render: () => void;
+    /** Cleanup disposables */
+    disposables: Array<{ dispose: () => void }>;
+  };
 }
 
 const terminalCache = new Map<string, CachedTerminal>();
@@ -85,10 +91,15 @@ function getTerminalConfig(isDark: boolean) {
   };
 }
 
-/**
- * Get or create a terminal + IPC wiring for a session.
- * IPC listeners are set up once and persist until disposeTerminal() is called.
- */
+const GUTTER_WIDTH = 64; // px — "HH:MM:SS" at 12px + padding
+
+function formatTime(d: Date): string {
+  const h = String(d.getHours()).padStart(2, '0');
+  const m = String(d.getMinutes()).padStart(2, '0');
+  const s = String(d.getSeconds()).padStart(2, '0');
+  return `${h}:${m}:${s}`;
+}
+
 function getOrCreateTerminal(sessionId: string, isDark: boolean): CachedTerminal {
   let cached = terminalCache.get(sessionId);
   if (cached) return cached;
@@ -111,15 +122,154 @@ function getOrCreateTerminal(sessionId: string, isDark: boolean): CachedTerminal
   const wrapper = document.createElement('div');
   wrapper.style.width = '100%';
   wrapper.style.height = '100%';
+  wrapper.style.display = 'flex';
 
-  // Wire up IPC once — these persist for the session lifetime
+  // --- Timestamp gutter (canvas-based, left of terminal) ---
+  const gutterCanvas = document.createElement('canvas');
+  gutterCanvas.style.width = `${GUTTER_WIDTH}px`;
+  gutterCanvas.style.flexShrink = '0';
+  gutterCanvas.style.cursor = 'default';
+
+  const termContainer = document.createElement('div');
+  termContainer.style.flex = '1';
+  termContainer.style.minWidth = '0';
+  termContainer.style.height = '100%';
+
+  wrapper.appendChild(gutterCanvas);
+  wrapper.appendChild(termContainer);
+
+  // Gutter state
+  const lineTimestamps: string[] = [];
+  let lastViewportTop = 0;
+
+  function renderGutter() {
+    const visible = useAppStore.getState().timestampGutterVisible;
+    if (!visible) return;
+    const buf = terminal.buffer.active;
+    const rows = terminal.rows;
+    const cellHeight = getCellHeight(terminal);
+    if (!cellHeight || cellHeight <= 0) return;
+
+    const currentTheme = useAppStore.getState().theme;
+    const dark = currentTheme === 'dark';
+
+    const dpr = window.devicePixelRatio || 1;
+    const canvasW = GUTTER_WIDTH;
+    // Use the full container height so the gutter extends to the bottom
+    const containerH = gutterCanvas.parentElement?.clientHeight || (rows * cellHeight);
+    const canvasH = Math.max(containerH, rows * cellHeight);
+
+    gutterCanvas.width = canvasW * dpr;
+    gutterCanvas.height = canvasH * dpr;
+    gutterCanvas.style.height = `${canvasH}px`;
+
+    const ctx = gutterCanvas.getContext('2d');
+    if (!ctx) return;
+    ctx.scale(dpr, dpr);
+
+    // Background matches terminal, with subtle right-edge fade for soft separation
+    ctx.fillStyle = dark ? '#0d0e1c' : '#d5dbd7';
+    ctx.fillRect(0, 0, canvasW, canvasH);
+
+    // Soft right edge: a thin gradient strip that blends into terminal bg
+    const edgeWidth = 6;
+    const fadeColor = dark ? [30, 31, 53] : [188, 197, 192]; // slightly lighter/darker
+    const grad = ctx.createLinearGradient(canvasW - edgeWidth, 0, canvasW, 0);
+    grad.addColorStop(0, `rgba(${fadeColor[0]},${fadeColor[1]},${fadeColor[2]},0)`);
+    grad.addColorStop(1, `rgba(${fadeColor[0]},${fadeColor[1]},${fadeColor[2]},0.5)`);
+    ctx.fillStyle = grad;
+    ctx.fillRect(canvasW - edgeWidth, 0, edgeWidth, canvasH);
+
+    // Text style — match terminal font size for baseline alignment
+    const fontSize = terminal.options.fontSize || 12;
+    ctx.font = `${fontSize}px 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace`;
+    ctx.textBaseline = 'middle';
+
+    const viewportTop = buf.viewportY;
+    lastViewportTop = viewportTop;
+
+    for (let row = 0; row < rows; row++) {
+      const absLine = viewportTop + row;
+      const ts = lineTimestamps[absLine];
+      if (ts) {
+        // Check if this line has actual content (non-empty)
+        const line = buf.getLine(absLine);
+        const lineText = line ? line.translateToString(true) : '';
+        const hasContent = lineText.trim().length > 0;
+
+        if (hasContent) {
+          const y = row * cellHeight + cellHeight / 2;
+          ctx.fillStyle = dark ? '#52525b' : '#93a09a';
+          ctx.fillText(ts, 0, y);
+        }
+      }
+    }
+  }
+
+  // Wire up IPC once
   let lineBuffer = '';
   let inAlternateScreen = false;
 
+  // --- Inline autocomplete (fish-style ghost suggestion) ---
+  let ghostSuffix = '';
+  let lastSuggestionInput = ''; // track lineBuffer to avoid redundant updates
+
+  function clearGhost() {
+    if (!ghostSuffix) return;
+    terminal.write('\x1b[u\x1b[K');
+    ghostSuffix = '';
+    lastSuggestionInput = '';
+  }
+
+  function showGhost(suffix: string) {
+    if (!suffix) return;
+    ghostSuffix = suffix;
+    terminal.write('\x1b[s\x1b[2m\x1b[90m' + suffix + '\x1b[0m\x1b[u');
+  }
+
+  function findSuggestion(prefix: string): string {
+    if (!prefix || prefix.length < 2) return '';
+    const history = useAppStore.getState().commandHistory;
+    for (let i = history.length - 1; i >= 0; i--) {
+      const cmd = history[i].cmd;
+      if (cmd.length > prefix.length && cmd.startsWith(prefix)) {
+        return cmd.slice(prefix.length);
+      }
+    }
+    return '';
+  }
+
+  function updateSuggestion() {
+    if (inAlternateScreen) { clearGhost(); return; }
+    // Skip if lineBuffer hasn't changed — avoids resetting cursor blink
+    if (lineBuffer === lastSuggestionInput && ghostSuffix) return;
+    lastSuggestionInput = lineBuffer;
+    clearGhost();
+    const suggestion = findSuggestion(lineBuffer);
+    if (suggestion) showGhost(suggestion);
+  }
+
+  function stampCurrentLine() {
+    if (inAlternateScreen) return;
+    const buf = terminal.buffer.active;
+    const absLine = buf.baseY + buf.cursorY;
+    // Always update timestamp so every line with new data gets a time
+    lineTimestamps[absLine] = formatTime(new Date());
+  }
+
   const dataDisposable = terminal.onData((data) => {
     try {
-      // Only track commands when in normal screen (shell prompt), not in vim/nano/etc.
       if (!inAlternateScreen) {
+        if ((data === '\x1b[C') && ghostSuffix) {
+          const accepted = ghostSuffix;
+          clearGhost();
+          lineBuffer += accepted;
+          window.api.ssh.write(sessionId, accepted);
+          return;
+        }
+
+        clearGhost();
+
         if (data === '\r') {
           if (lineBuffer.trim()) {
             useAppStore.getState().addCommand(sessionId, lineBuffer);
@@ -142,43 +292,102 @@ function getOrCreateTerminal(sessionId: string, isDark: boolean): CachedTerminal
   });
 
   const unsubData = window.api.ssh.onData(sessionId, (data) => {
-    // Detect alternate screen buffer enter/exit
     if (data.includes('\x1b[?1049h') || data.includes('\x1b[?47h') || data.includes('\x1b[?1047h')) {
       inAlternateScreen = true;
       lineBuffer = '';
+      clearGhost();
     }
     if (data.includes('\x1b[?1049l') || data.includes('\x1b[?47l') || data.includes('\x1b[?1047l')) {
       inAlternateScreen = false;
       lineBuffer = '';
     }
+    // Detect clear screen sequences
+    const isClear = data.includes('\x1b[2J') || data.includes('\x1bc');
+
     terminal.write(data);
+
+    // Reset timestamps AFTER terminal processes the clear, so cursor is repositioned
+    if (isClear) {
+      lineTimestamps.length = 0;
+    }
+
+    // Stamp the current line after write (cursor is now at final position)
+    stampCurrentLine();
+    // Render gutter after data
+    renderGutter();
+    // Show suggestion after server echo settles
+    if (!inAlternateScreen && lineBuffer) {
+      updateSuggestion();
+    }
   });
+
   const unsubClose = window.api.ssh.onClose(sessionId, () => {
     terminal.write('\r\n\x1b[31m[Connection closed]\x1b[0m\r\n');
+    renderGutter();
   });
   const unsubError = window.api.ssh.onError(sessionId, (error) => {
     terminal.write(`\r\n\x1b[31m[Error: ${error}]\x1b[0m\r\n`);
+    renderGutter();
   });
   const resizeDisposable = terminal.onResize(({ cols, rows }) => {
     window.api.ssh.resize(sessionId, cols, rows);
+    renderGutter();
+  });
+
+  // Scroll sync: re-render gutter when terminal scrolls
+  const scrollDisposable = terminal.onScroll(() => {
+    renderGutter();
+  });
+
+  // Also re-render on linefeed
+  const lineFeedDisposable = terminal.onLineFeed(() => {
+    stampCurrentLine();
+    renderGutter();
   });
 
   const ipcCleanup = () => {
     dataDisposable.dispose();
     resizeDisposable.dispose();
+    scrollDisposable.dispose();
+    lineFeedDisposable.dispose();
     unsubData();
     unsubClose();
     unsubError();
   };
 
-  cached = { terminal, fitAddon, wrapper, initialized: false, ipcCleanup };
+  cached = {
+    terminal,
+    fitAddon,
+    wrapper,
+    initialized: false,
+    ipcCleanup,
+    gutter: {
+      lineTimestamps,
+      canvas: gutterCanvas,
+      lastViewportTop,
+      render: renderGutter,
+      disposables: [],
+    },
+  };
   terminalCache.set(sessionId, cached);
   return cached;
+}
+
+/** Get the actual rendered cell height from xterm's internal dimensions */
+function getCellHeight(terminal: Terminal): number {
+  // xterm exposes cell dimensions via _core (internal API)
+  try {
+    const dims = (terminal as any)._core?._renderService?.dimensions;
+    if (dims?.css?.cell?.height) return dims.css.cell.height;
+  } catch { /* ignore */ }
+  // Fallback: estimate from font size
+  return Math.ceil(terminal.options.fontSize! * 1.2);
 }
 
 export default function TerminalView({ sessionId }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const appTheme = useAppStore((s) => s.theme);
+  const gutterVisible = useAppStore((s) => s.timestampGutterVisible);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -187,14 +396,23 @@ export default function TerminalView({ sessionId }: TerminalViewProps) {
     const cached = getOrCreateTerminal(sessionId, isDark);
     const { terminal, fitAddon, wrapper } = cached;
 
-    // Initialize terminal DOM if first time
+    // Initialize terminal DOM — open into the right-side termContainer
     if (!cached.initialized) {
-      terminal.open(wrapper);
+      const termContainer = wrapper.children[1] as HTMLDivElement;
+      terminal.open(termContainer);
       cached.initialized = true;
     }
 
     // Update theme
     terminal.options.theme = getTerminalConfig(isDark).theme;
+
+    // Update gutter canvas background on theme change
+    const gutterCanvas = cached.gutter.canvas;
+    gutterCanvas.style.backgroundColor = isDark ? '#0d0e1c' : '#d5dbd7';
+
+    // Update gutter visibility
+    gutterCanvas.style.display = gutterVisible ? 'block' : 'none';
+    gutterCanvas.style.width = gutterVisible ? `${GUTTER_WIDTH}px` : '0px';
 
     // Move wrapper into this container
     container.appendChild(wrapper);
@@ -207,7 +425,10 @@ export default function TerminalView({ sessionId }: TerminalViewProps) {
     // Fit to container
     const doFit = () => {
       if (container.offsetWidth > 0 && container.offsetHeight > 0) {
-        try { fitAddon.fit(); } catch { /* ignore */ }
+        try {
+          fitAddon.fit();
+          cached.gutter.render();
+        } catch { /* ignore */ }
       } else {
         setTimeout(doFit, 200);
       }
@@ -219,7 +440,10 @@ export default function TerminalView({ sessionId }: TerminalViewProps) {
 
     // Observe container resize
     const resizeObserver = new ResizeObserver(() => {
-      try { fitAddon.fit(); } catch { /* ignore */ }
+      try {
+        fitAddon.fit();
+        cached.gutter.render();
+      } catch { /* ignore */ }
     });
     resizeObserver.observe(container);
 
@@ -253,7 +477,7 @@ export default function TerminalView({ sessionId }: TerminalViewProps) {
       container.removeEventListener('keydown', handleKeyDown);
       container.removeEventListener('contextmenu', handleContextMenu);
     };
-  }, [sessionId, appTheme]);
+  }, [sessionId, appTheme, gutterVisible]);
 
   const bgColor = appTheme === 'dark' ? '#0d0e1c' : '#d5dbd7';
 
