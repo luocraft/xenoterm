@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { useLayoutStore } from '../store/layout-store';
 import { useAppStore } from '../store/app-store';
+import { useT } from '../i18n';
 import { collectLeaves } from '../store/layout-tree-utils';
 import TerminalView, { disposeTerminal } from './TerminalView';
 import DropZoneOverlay from './DropZoneOverlay';
@@ -12,6 +13,7 @@ interface LeafPaneWrapperProps {
 }
 
 export default function LeafPaneWrapper({ paneId, sessionId }: LeafPaneWrapperProps) {
+  const t = useT();
   const [isDragOver, setIsDragOver] = useState(false);
   const paneRef = React.useRef<HTMLDivElement>(null);
 
@@ -121,6 +123,18 @@ export default function LeafPaneWrapper({ paneId, sessionId }: LeafPaneWrapperPr
     : status === 'connecting' ? 'bg-yellow-400 animate-pulse'
     : status === 'error' ? 'bg-red-400' : 'bg-gray-500';
 
+  const [reconnecting, setReconnecting] = useState(false);
+  const handleReconnect = useCallback(async () => {
+    setReconnecting(true);
+    try {
+      await useAppStore.getState().reconnectSession(sessionId);
+    } catch (err) {
+      console.error('Reconnect failed:', err);
+    } finally {
+      setReconnecting(false);
+    }
+  }, [sessionId]);
+
   return (
     <div
       ref={paneRef}
@@ -152,11 +166,22 @@ export default function LeafPaneWrapper({ paneId, sessionId }: LeafPaneWrapperPr
           <span className="flex-1" />
 
           <span className={`w-2 h-2 rounded-full flex-shrink-0 ${statusDot}`} />
+          {(status === 'disconnected' || status === 'error') && (
+            <button
+              onClick={(e) => { e.stopPropagation(); handleReconnect(); }}
+              disabled={reconnecting}
+              className="px-1.5 rounded transition-opacity opacity-60 hover:opacity-100"
+              style={{ color: termFgBold, fontSize: '12px', lineHeight: '1' }}
+              title="Reconnect"
+            >
+              {reconnecting ? '⏳' : '🔄'}
+            </button>
+          )}
           <button
             onClick={handleExtractPane}
             className="px-1.5 rounded transition-opacity opacity-60 hover:opacity-100"
             style={{ color: termFgBold, fontSize: '13px', lineHeight: '1' }}
-            title="Extract to independent tab"
+            title={t('pane.extract')}
           >
             ⌐⌙
           </button>
@@ -164,7 +189,7 @@ export default function LeafPaneWrapper({ paneId, sessionId }: LeafPaneWrapperPr
             onClick={handleClosePane}
             className="px-1.5 rounded transition-opacity opacity-60 hover:opacity-100"
             style={{ color: termFgBold, fontSize: '13px', lineHeight: '1', fontWeight: 700 }}
-            title="Close this session"
+            title={t('pane.close')}
           >
             ✕
           </button>
@@ -174,6 +199,21 @@ export default function LeafPaneWrapper({ paneId, sessionId }: LeafPaneWrapperPr
       {/* Terminal */}
       <div className="flex-1 relative overflow-hidden min-h-0">
         <TerminalView sessionId={sessionId} />
+        {(status === 'disconnected' || status === 'error') && !hasMultiplePanes && (
+          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 px-3 py-1.5 rounded-lg"
+            style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' }}>
+            <span className="text-[11px]" style={{ color: status === 'error' ? '#ef4444' : 'var(--color-text-secondary)' }}>
+              {status === 'error' ? '⚠ Connection error' : '🔌 Disconnected'}
+            </span>
+            <button
+              onClick={handleReconnect}
+              disabled={reconnecting}
+              className="px-2 py-0.5 text-[11px] rounded hover:opacity-90 disabled:opacity-50"
+              style={{ backgroundColor: 'var(--color-accent)', color: '#fff' }}>
+              {reconnecting ? '⏳' : '🔄 Reconnect'}
+            </button>
+          </div>
+        )}
         {isDragOver && <DropZoneOverlay paneId={paneId} onDrop={handleDrop} />}
       </div>
     </div>

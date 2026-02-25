@@ -12,38 +12,83 @@ import ToastContainer from './components/Toast';
 import CommandHistory from './components/CommandHistory';
 import NetDebugPanel from './components/NetDebugPanel';
 import SerialDebugPanel from './components/SerialDebugPanel';
+import CanDebugPanel from './components/CanDebugPanel';
+import EtherCATPanel from './components/EtherCATPanel';
+import { LicenseDialog } from './components/LicenseDialog';
 import { useLayoutStore } from './store/layout-store';
+import { useT } from './i18n';
 import type { HostEntry } from '../shared/types';
 
-function WelcomeScreen() {
-  return (
-    <div className="flex-1 flex items-center justify-center" style={{ color: 'var(--color-text-muted)' }}>
-      <div className="text-center max-w-md">
-        <div className="text-5xl mb-6 opacity-30">⌨</div>
-        <p className="text-xl font-semibold mb-1" style={{ color: 'var(--color-text-primary)' }}>XenoTerm</p>
-        <p className="text-xs mb-8" style={{ color: 'var(--color-text-dim)' }}>SSH · Network · Serial — All in one</p>
+function WelcomeScreen({
+  onSSH,
+  onNetwork,
+  onSerial,
+  onCAN,
+  onEtherCAT,
+}: {
+  onSSH: () => void;
+  onNetwork: () => void;
+  onSerial: () => void;
+  onCAN: () => void;
+  onEtherCAT: () => void;
+}) {
+  const t = useT();
+  const features = [
+    { emoji: '🖥', title: 'SSH', desc: t('welcome.ssh.desc'), color: '#3b82f6', onClick: onSSH },
+    { emoji: '🔌', title: 'Network', desc: t('welcome.net.desc'), color: '#8b5cf6', onClick: onNetwork },
+    { emoji: '⚡', title: 'Serial', desc: t('welcome.serial.desc'), color: '#f59e0b', onClick: onSerial },
+    { emoji: '🚗', title: 'CAN Bus', desc: t('welcome.can.desc'), color: '#ef4444', onClick: onCAN },
+    { emoji: '⚙️', title: 'EtherCAT', desc: t('welcome.ecat.desc'), color: '#22c55e', onClick: onEtherCAT },
+  ];
 
-        <div className="grid grid-cols-3 gap-3 text-left">
-          <div className="p-3 rounded-xl" style={{ backgroundColor: 'var(--color-hover-bg)', border: '1px solid var(--color-border)' }}>
-            <div className="text-lg mb-1.5">🖥</div>
-            <p className="text-xs font-medium mb-0.5" style={{ color: 'var(--color-text-secondary)' }}>SSH Terminal</p>
-            <p className="text-[10px] leading-relaxed" style={{ color: 'var(--color-text-dim)' }}>Connect to remote servers with split-pane workspaces</p>
-          </div>
-          <div className="p-3 rounded-xl" style={{ backgroundColor: 'var(--color-hover-bg)', border: '1px solid var(--color-border)' }}>
-            <div className="text-lg mb-1.5">🔌</div>
-            <p className="text-xs font-medium mb-0.5" style={{ color: 'var(--color-text-secondary)' }}>Network Debug</p>
-            <p className="text-[10px] leading-relaxed" style={{ color: 'var(--color-text-dim)' }}>TCP Client/Server and UDP data exchange</p>
-          </div>
-          <div className="p-3 rounded-xl" style={{ backgroundColor: 'var(--color-hover-bg)', border: '1px solid var(--color-border)' }}>
-            <div className="text-lg mb-1.5">⚡</div>
-            <p className="text-xs font-medium mb-0.5" style={{ color: 'var(--color-text-secondary)' }}>Serial Debug</p>
-            <p className="text-[10px] leading-relaxed" style={{ color: 'var(--color-text-dim)' }}>Serial port communication with DTR/RTS control</p>
-          </div>
+  return (
+    <div className="flex-1 flex items-center justify-center overflow-hidden relative">
+      <div className="text-center relative z-10">
+        {/* Logo */}
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold tracking-tight mb-1" style={{ color: 'var(--color-text-primary)' }}>
+            XenoTerm
+          </h1>
+          <p className="text-xs tracking-wide" style={{ color: 'var(--color-text-dim)' }}>
+            {t('welcome.subtitle')}
+          </p>
         </div>
 
-        <p className="text-[10px] mt-6" style={{ color: 'var(--color-text-dim)' }}>
-          Double-click a connection or use the toolbar below
-        </p>
+        {/* Feature cards */}
+        <div className="flex items-stretch justify-center gap-3 mb-8">
+          {features.map((f) => (
+            <div key={f.title}
+              onClick={f.onClick}
+              className="group relative w-28 p-4 rounded-xl text-center transition-all duration-200 hover:scale-[1.04] cursor-pointer active:scale-[0.97]"
+              style={{
+                backgroundColor: 'var(--color-sidebar)',
+                border: '1px solid var(--color-border)',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+              }}>
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center mx-auto mb-2.5 transition-transform group-hover:scale-110"
+                style={{ backgroundColor: `${f.color}15` }}>
+                <span className="text-lg">{f.emoji}</span>
+              </div>
+              <p className="text-[11px] font-semibold mb-1 whitespace-nowrap" style={{ color: 'var(--color-text-primary)' }}>{f.title}</p>
+              <p className="text-[9px] leading-snug whitespace-nowrap" style={{ color: 'var(--color-text-dim)' }}>{f.desc}</p>
+              <div className="absolute bottom-0 left-3 right-3 h-[2px] rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                style={{ backgroundColor: f.color }} />
+            </div>
+          ))}
+        </div>
+
+        {/* Hints */}
+        <div className="flex items-center justify-center gap-4 text-[10px]" style={{ color: 'var(--color-text-dim)' }}>
+          <span className="flex items-center gap-1">
+            <kbd className="px-1.5 py-0.5 rounded text-[9px] font-mono"
+              style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-border)' }}>
+              Dbl-click
+            </kbd>
+            {t('welcome.hint.dblclick')}
+          </span>
+          <span style={{ color: 'var(--color-border)' }}>|</span>
+          <span>{t('welcome.hint.toolbar')}</span>
+        </div>
       </div>
     </div>
   );
@@ -59,7 +104,7 @@ function PasswordPrompt({
   onCancel: () => void;
 }) {
   const [password, setPassword] = useState('');
-
+  const t = useT();
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center" style={{ backgroundColor: 'var(--color-overlay)' }} onClick={onCancel}>
       <div
@@ -67,8 +112,8 @@ function PasswordPrompt({
         style={{ border: '1px solid var(--color-input-border)' }}
         onClick={(e: React.MouseEvent) => e.stopPropagation()}
       >
-        <h3 className="text-sm font-semibold mb-1" style={{ color: 'var(--color-text-primary)' }}>Password Required</h3>
-        <p className="text-xs mb-3" style={{ color: 'var(--color-text-muted)' }}>Enter password for {hostName}</p>
+        <h3 className="text-sm font-semibold mb-1" style={{ color: 'var(--color-text-primary)' }}>{t('dialog.password.title')}</h3>
+        <p className="text-xs mb-3" style={{ color: 'var(--color-text-muted)' }}>{t('dialog.password.prompt', { host: hostName })}</p>
         <form onSubmit={(e: React.FormEvent) => { e.preventDefault(); onSubmit(password); }}>
           <input
             type="password"
@@ -77,17 +122,17 @@ function PasswordPrompt({
             autoFocus
             className="w-full px-2.5 py-1.5 text-xs rounded-lg outline-none focus:border-[var(--color-accent)] transition-colors mb-3"
             style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text-primary)' }}
-            placeholder="Password"
+            placeholder={t('dialog.password.placeholder')}
           />
           <div className="flex justify-end gap-2">
             <button type="button" onClick={onCancel}
               className="px-3 py-1.5 text-xs rounded-lg transition-colors"
               style={{ backgroundColor: 'var(--color-input-bg)', color: 'var(--color-text-secondary)' }}>
-              Cancel
+              {t('common.cancel')}
             </button>
             <button type="submit"
               className="px-4 py-1.5 text-xs rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 transition-opacity">
-              Connect
+              {t('common.connect')}
             </button>
           </div>
         </form>
@@ -97,6 +142,7 @@ function PasswordPrompt({
 }
 
 export default function App() {
+  const t = useT();
   const loadAppConfig = useAppStore((s) => s.loadAppConfig);
   const loadHosts = useAppStore((s) => s.loadHosts);
   const loadCommandHistory = useAppStore((s) => s.loadCommandHistory);
@@ -114,6 +160,10 @@ export default function App() {
   const [passwordPrompt, setPasswordPrompt] = useState<{ hostId: string; hostName: string } | null>(null);
   const [showNetDebug, setShowNetDebug] = useState(false);
   const [showSerialDebug, setShowSerialDebug] = useState(false);
+  const [showCanDebug, setShowCanDebug] = useState(false);
+  const [showEthercat, setShowEthercat] = useState(false);
+  const [showLicense, setShowLicense] = useState(false);
+  const [licenseExpired, setLicenseExpired] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
   const [sidePanelWidth, setSidePanelWidth] = useState(400);
   const [isDraggingSidePanel, setIsDraggingSidePanel] = useState(false);
@@ -131,7 +181,20 @@ export default function App() {
     loadAppConfig();
     loadHosts();
     loadCommandHistory();
+    // Check license on startup
+    window.api.license.getStatus().then((s) => {
+      if (s.expired && !s.licensed) setLicenseExpired(true);
+    }).catch(() => {});
   }, [loadAppConfig, loadHosts, loadCommandHistory]);
+
+  // Global listener for SFTP progress — must be at App level so it's always active
+  const updateTransfer = useAppStore((s) => s.updateTransfer);
+  useEffect(() => {
+    const unsub = window.api.sftp.onProgress((progress) => {
+      updateTransfer(progress.transferId, progress);
+    });
+    return unsub;
+  }, [updateTransfer]);
 
   // Handle connect with password prompt
   const handleConnect = async (hostId: string, password?: string) => {
@@ -139,8 +202,12 @@ export default function App() {
     if (!host) return;
 
     if (host.authMethod === 'password' && !password) {
-      setPasswordPrompt({ hostId, hostName: host.name });
-      return;
+      if (host.password) {
+        password = host.password;
+      } else {
+        setPasswordPrompt({ hostId, hostName: host.name });
+        return;
+      }
     }
 
     try {
@@ -286,8 +353,11 @@ export default function App() {
             onEditConnection={(host: HostEntry) => { setEditingHost(host); setShowConnectionForm(true); }}
             onImportExport={() => setShowImportExport(true)}
             onConnect={handleConnect}
-            onNetDebug={() => { setShowNetDebug((v) => !v); setShowSerialDebug(false); }}
-            onSerialDebug={() => { setShowSerialDebug((v) => !v); setShowNetDebug(false); }}
+            onNetDebug={() => { setShowNetDebug((v) => !v); setShowSerialDebug(false); setShowCanDebug(false); setShowEthercat(false); }}
+            onSerialDebug={() => { setShowSerialDebug((v) => !v); setShowNetDebug(false); setShowCanDebug(false); setShowEthercat(false); }}
+            onCanDebug={() => { setShowCanDebug((v) => !v); setShowNetDebug(false); setShowSerialDebug(false); setShowEthercat(false); }}
+            onEthercatDebug={() => { setShowEthercat((v) => !v); setShowNetDebug(false); setShowSerialDebug(false); setShowCanDebug(false); }}
+            onLicenseClick={() => setShowLicense(true)}
           />
         }
       >
@@ -300,11 +370,25 @@ export default function App() {
                 <NetDebugPanel onClose={() => setShowNetDebug(false)} />
               </div>
             ) : showSerialDebug ? (
-              <div className="flex-1 overflow-visible">
+              <div className="flex-1 min-h-0 overflow-hidden">
                 <SerialDebugPanel onClose={() => setShowSerialDebug(false)} />
               </div>
+            ) : showCanDebug ? (
+              <div className="flex-1 min-h-0 overflow-hidden">
+                <CanDebugPanel onClose={() => setShowCanDebug(false)} />
+              </div>
+            ) : showEthercat ? (
+              <div className="flex-1 min-h-0 overflow-hidden">
+                <EtherCATPanel onClose={() => setShowEthercat(false)} />
+              </div>
             ) : (
-              <WelcomeScreen />
+              <WelcomeScreen
+                onSSH={() => { setEditingHost(null); setShowConnectionForm(true); }}
+                onNetwork={() => { setShowNetDebug(true); setShowSerialDebug(false); setShowCanDebug(false); setShowEthercat(false); }}
+                onSerial={() => { setShowSerialDebug(true); setShowNetDebug(false); setShowCanDebug(false); setShowEthercat(false); }}
+                onCAN={() => { setShowCanDebug(true); setShowNetDebug(false); setShowSerialDebug(false); setShowEthercat(false); }}
+                onEtherCAT={() => { setShowEthercat(true); setShowNetDebug(false); setShowSerialDebug(false); setShowCanDebug(false); }}
+              />
             )}
           </div>
         ) : (
@@ -333,11 +417,6 @@ export default function App() {
                   />
                   <div className="flex-1 flex flex-col overflow-hidden min-h-0">
                     <FileManager sessionId={activeSessionId} />
-                    {hasActiveTransfers && (
-                      <div className="max-h-[150px] overflow-hidden" style={{ borderTop: '1px solid var(--color-border)' }}>
-                        <TransferQueue />
-                      </div>
-                    )}
                   </div>
                 </>
               )}
@@ -386,6 +465,40 @@ export default function App() {
                 </div>
               </>
             )}
+
+            {/* CAN debug side panel */}
+            {showCanDebug && (
+              <>
+                <div
+                  onMouseDown={(e) => { e.preventDefault(); setIsDraggingSidePanel(true); }}
+                  className="flex-shrink-0 w-1 cursor-col-resize transition-colors"
+                  style={{ backgroundColor: isDraggingSidePanel ? 'var(--color-accent)' : 'var(--color-border)' }}
+                />
+                <div
+                  className="flex-shrink-0 overflow-hidden"
+                  style={{ width: sidePanelWidth }}
+                >
+                  <CanDebugPanel onClose={() => setShowCanDebug(false)} />
+                </div>
+              </>
+            )}
+
+            {/* EtherCAT debug side panel */}
+            {showEthercat && (
+              <>
+                <div
+                  onMouseDown={(e) => { e.preventDefault(); setIsDraggingSidePanel(true); }}
+                  className="flex-shrink-0 w-1 cursor-col-resize transition-colors"
+                  style={{ backgroundColor: isDraggingSidePanel ? 'var(--color-accent)' : 'var(--color-border)' }}
+                />
+                <div
+                  className="flex-shrink-0 overflow-hidden"
+                  style={{ width: sidePanelWidth }}
+                >
+                  <EtherCATPanel onClose={() => setShowEthercat(false)} />
+                </div>
+              </>
+            )}
           </div>
         )}
       </MainLayout>
@@ -416,7 +529,7 @@ export default function App() {
           >
             <div className="flex items-center gap-2 mb-2">
               <span className="text-lg">❌</span>
-              <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>Connection Failed</h3>
+              <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>{t('dialog.connFailed.title')}</h3>
             </div>
             <p className="text-xs mb-4 leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>{connectError}</p>
             <div className="flex justify-end">
@@ -424,14 +537,59 @@ export default function App() {
                 onClick={() => setConnectError(null)}
                 className="px-4 py-1.5 text-xs rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 transition-opacity"
               >
-                OK
+                {t('common.ok')}
               </button>
             </div>
           </div>
         </div>
       )}
 
+      {/* Floating transfer progress panel */}
+      {transfers.length > 0 && (
+        <div className="fixed bottom-4 right-4 z-30 w-[320px] max-h-[200px] overflow-y-auto rounded-xl shadow-2xl"
+          style={{ backgroundColor: 'var(--color-sidebar)', border: '1px solid var(--color-border)' }}>
+          <TransferQueue />
+        </div>
+      )}
+
       <ToastContainer />
+      {showLicense && <LicenseDialog onClose={() => {
+        setShowLicense(false);
+        // Re-check license after dialog closes (user may have activated)
+        window.api.license.getStatus().then((s) => {
+          setLicenseExpired(s.expired && !s.licensed);
+        }).catch(() => {});
+      }} />}
+
+      {/* Trial expired blocking overlay */}
+      {licenseExpired && !showLicense && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center"
+          style={{ backgroundColor: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)' }}>
+          <div className="text-center max-w-sm">
+            <div className="text-5xl mb-4">⏰</div>
+            <h2 className="text-lg font-bold mb-2" style={{ color: '#fff' }}>
+              {t('dialog.trialExpired.title')}
+            </h2>
+            <p className="text-xs mb-6 leading-relaxed" style={{ color: 'rgba(255,255,255,0.6)' }}>
+              {t('dialog.trialExpired.msg')}
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => setShowLicense(true)}
+                className="px-6 py-2.5 text-xs rounded-lg text-white font-medium transition-opacity hover:opacity-90"
+                style={{ background: 'linear-gradient(135deg, var(--color-accent), #8b5cf6)' }}>
+                🔑 {t('dialog.trialExpired.buy')}
+              </button>
+              <button
+                onClick={() => window.close()}
+                className="px-6 py-1.5 text-[10px] rounded-lg transition-colors"
+                style={{ color: 'rgba(255,255,255,0.4)' }}>
+                {t('dialog.trialExpired.exit')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

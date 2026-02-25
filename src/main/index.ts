@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, shell, globalShortcut } from 'electron';
 import { join } from 'path';
 
 // Fix native module resolution: Electron runs from dist/main/ but native modules
@@ -50,6 +50,29 @@ function createWindow(): void {
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'));
   }
+
+  // Zoom controls
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (!mainWindow) return;
+    const wc = mainWindow.webContents;
+    if (input.control && !input.alt && !input.shift && input.type === 'keyDown') {
+      if (input.key === '=' || input.key === '+') {
+        event.preventDefault();
+        const newLevel = wc.getZoomLevel() + 0.5;
+        wc.setZoomLevel(newLevel);
+        mainWindow.setTitleBarOverlay({ height: Math.round(36 * Math.pow(1.2, newLevel)) });
+      } else if (input.key === '-') {
+        event.preventDefault();
+        const newLevel = wc.getZoomLevel() - 0.5;
+        wc.setZoomLevel(newLevel);
+        mainWindow.setTitleBarOverlay({ height: Math.round(36 * Math.pow(1.2, newLevel)) });
+      } else if (input.key === '0') {
+        event.preventDefault();
+        wc.setZoomLevel(0);
+        mainWindow.setTitleBarOverlay({ height: 36 });
+      }
+    }
+  });
 }
 
 app.whenReady().then(() => {

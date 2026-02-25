@@ -8,6 +8,8 @@ interface SessionEntry {
   client: Client;
   stream: ClientChannel | null;
   jumpClient: Client | null;
+  /** Password stored in memory for reconnect (never persisted to disk) */
+  password?: string;
   dataCallbacks: Array<(data: string) => void>;
   closeCallbacks: Array<() => void>;
   errorCallbacks: Array<(error: string) => void>;
@@ -35,6 +37,7 @@ export class SSHService {
       client: new Client(),
       stream: null,
       jumpClient: null,
+      password,
       dataCallbacks: [],
       closeCallbacks: [],
       errorCallbacks: [],
@@ -47,6 +50,10 @@ export class SSHService {
       await this._establishConnection(entry, hostEntry, password);
       return entry.session;
     } catch (err) {
+      // Clean up failed session from map
+      this.sessions.delete(sessionId);
+      entry.client.end();
+      if (entry.jumpClient) entry.jumpClient.end();
       entry.session.status = 'error';
       entry.session.error = err instanceof Error ? err.message : String(err);
       throw err;
@@ -100,12 +107,13 @@ export class SSHService {
 
   private _connectClient(entry: SessionEntry, config: ConnectConfig): Promise<void> {
     return new Promise((resolve, reject) => {
+      const client = entry.client; // capture reference to detect stale close events
       const timeout = setTimeout(() => {
         entry.client.end();
         reject(new Error('Connection timeout: exceeded 2 seconds'));
       }, 2000);
 
-      entry.client
+      client
         .on('ready', () => {
           clearTimeout(timeout);
           entry.session.status = 'connected';
@@ -115,12 +123,16 @@ export class SSHService {
         })
         .on('error', (err) => {
           clearTimeout(timeout);
+          // Ignore events from a replaced client (after reconnect)
+          if (entry.client !== client) return;
           entry.session.status = 'error';
           entry.session.error = this._formatError(err);
           entry.errorCallbacks.forEach((cb) => cb(entry.session.error!));
           reject(new Error(entry.session.error));
         })
         .on('close', () => {
+          // Ignore events from a replaced client (after reconnect)
+          if (entry.client !== client) return;
           if (entry.session.status === 'connected') {
             entry.session.status = 'disconnected';
             entry.closeCallbacks.forEach((cb) => cb());
@@ -209,6 +221,39 @@ export class SSHService {
     }
     this._cleanupSession(entry);
     entry.closeCallbacks.forEach((cb) => cb());
+    this.sessions.delete(sessionId);
+  }
+
+  async reconnect(sessionId: string, password?: string): Promise<SSHSession> {
+    const oldEntry = this.sessions.get(sessionId);
+    if (!oldEntry) throw new Error('Session not found');
+
+    const hostEntry = this.hostResolver?.(oldEntry.session.hostEntryId);
+    if (!hostEntry) throw new Error('Host not found');
+
+    // Use stored password if none provided
+    const effectivePassword = password ?? oldEntry.password;
+
+    // Clean up old connection without firing close callbacks
+    try { oldEntry.client.end(); } catch { /* ignore */ }
+    if (oldEntry.jumpClient) { try { oldEntry.jumpClient.end(); } catch { /* ignore */ } }
+    this._cleanupSession(oldEntry);
+
+    // Create new client, reuse same sessionId and callbacks
+    oldEntry.client = new Client();
+    oldEntry.stream = null;
+    oldEntry.jumpClient = null;
+    oldEntry.session.status = 'connecting';
+    oldEntry.session.error = undefined;
+
+    try {
+      await this._establishConnection(oldEntry, hostEntry, effectivePassword);
+      return oldEntry.session;
+    } catch (err) {
+      oldEntry.session.status = 'error';
+      oldEntry.session.error = err instanceof Error ? err.message : String(err);
+      throw err;
+    }
   }
 
   getSession(sessionId: string): SSHSession | undefined {
@@ -253,7 +298,8 @@ export class SSHService {
           });
 
           stream.on('close', () => {
-            entry.closeCallbacks.forEach((cb) => cb());
+            // Client 'close' event handles closeCallbacks — no need to fire here
+            entry.stream = null;
           });
 
           resolve();

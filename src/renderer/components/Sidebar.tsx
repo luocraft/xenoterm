@@ -1,6 +1,8 @@
-﻿import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useAppStore } from '../store/app-store';
-import type { HostEntry, ConnectionGroup } from '../../shared/types';
+import { LicenseStatusBar } from './LicenseDialog';
+import { useT, useI18nStore } from '../i18n';
+import type { HostEntry } from '../../shared/types';
 
 interface ContextMenuState {
   x: number;
@@ -47,7 +49,10 @@ export default function Sidebar({
   onImportExport,
   onConnect,
   onNetDebug,
-  onSerialDebug
+  onSerialDebug,
+  onCanDebug,
+  onEthercatDebug,
+  onLicenseClick
 }: {
   onNewConnection: () => void;
   onEditConnection: (host: HostEntry) => void;
@@ -55,16 +60,20 @@ export default function Sidebar({
   onConnect?: (hostId: string) => void;
   onNetDebug?: () => void;
   onSerialDebug?: () => void;
+  onCanDebug?: () => void;
+  onEthercatDebug?: () => void;
+  onLicenseClick?: () => void;
 }) {
   const hosts = useAppStore((s) => s.hosts);
   const groups = useAppStore((s) => s.groups);
   const selectedHostId = useAppStore((s) => s.selectedHostId);
   const selectHost = useAppStore((s) => s.selectHost);
   const removeHost = useAppStore((s) => s.removeHost);
-  const connectToHost = useAppStore((s) => s.connectToHost);
   const toggleTheme = useAppStore((s) => s.toggleTheme);
   const theme = useAppStore((s) => s.theme);
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
+  const t = useT();
+  const { locale, setLocale } = useI18nStore();
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -107,24 +116,33 @@ export default function Sidebar({
   return (
     <div className="h-full flex flex-col" style={{ backgroundColor: 'var(--color-sidebar)' }}>
       {/* Header */}
-      <div className="flex items-center justify-between px-3 h-9 flex-shrink-0" style={{ borderBottom: '1px solid var(--color-border)' }}>
-        <span className="text-xs font-semibold" style={{ color: 'var(--color-text-primary)' }}>XenoTerm</span>
+      <div className="flex items-center justify-between px-3 h-9 flex-shrink-0"
+        style={{ borderBottom: '1px solid var(--color-border)' }}>
+        <span className="text-xs font-bold tracking-tight" style={{ color: 'var(--color-text-primary)' }}>
+          XenoTerm
+        </span>
         <div className="flex items-center gap-0.5">
           <button
             onClick={handleOpenHelp}
-            className="p-0.5 rounded transition-colors text-[11px]"
+            className="w-6 h-6 rounded-md flex items-center justify-center transition-colors hover:bg-[var(--color-hover-bg)] text-[11px]"
             title="Help"
           >❓</button>
           <button
+            onClick={() => setLocale(locale === 'zh' ? 'en' : 'zh')}
+            className="w-6 h-6 rounded-md flex items-center justify-center transition-colors hover:bg-[var(--color-hover-bg)] text-[10px] font-medium"
+            title={locale === 'zh' ? 'Switch to English' : '切换到中文'}
+            style={{ color: 'var(--color-text-dim)' }}
+          >{locale === 'zh' ? 'EN' : '中'}</button>
+          <button
             onClick={toggleTheme}
-            className="p-0.5 rounded transition-colors text-[11px]"
+            className="w-6 h-6 rounded-md flex items-center justify-center transition-colors hover:bg-[var(--color-hover-bg)] text-[11px]"
             title="Toggle theme"
           >{theme === 'dark' ? '🌙' : '☀️'}</button>
           <button
             onClick={toggleSidebar}
-            className="p-0.5 rounded transition-colors text-[11px]"
-            style={{ color: '#555' }}
-            title="Collapse sidebar"
+            className="w-6 h-6 rounded-md flex items-center justify-center transition-colors hover:bg-[var(--color-hover-bg)] text-[11px]"
+            style={{ color: 'var(--color-text-dim)' }}
+            title="Collapse"
           >◀</button>
         </div>
       </div>
@@ -133,9 +151,10 @@ export default function Sidebar({
       <div className="px-3 py-2">
         <button
           onClick={onNewConnection}
-          className="w-full py-1.5 text-xs rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 transition-opacity"
+          className="w-full py-1.5 text-[11px] rounded-md text-white hover:opacity-90 transition-opacity font-medium"
+          style={{ backgroundColor: 'var(--color-accent)' }}
         >
-          + New
+          {t('sidebar.newConn')}
         </button>
       </div>
 
@@ -186,41 +205,39 @@ export default function Sidebar({
         ))}
 
         {hosts.length === 0 && (
-          <div className="px-3 py-4 text-center text-[10px]" style={{ color: 'var(--color-text-dim)' }}>
-            No connections yet
+          <div className="px-3 py-8 text-center">
+            <div className="text-2xl mb-2 opacity-30">🖥</div>
+            <p className="text-[10px]" style={{ color: 'var(--color-text-dim)' }}>
+              {t('sidebar.empty')}
+            </p>
           </div>
         )}
       </div>
 
-      {/* Bottom Toolbar */}
+      {/* Bottom Toolbar — compact icon row */}
       <div
-        className="flex items-center justify-around px-2 py-1.5"
+        className="px-2 py-1.5 flex flex-col gap-1"
         style={{ borderTop: '1px solid var(--color-border)' }}
       >
-        <button
-          onClick={onImportExport}
-          className="flex flex-col items-center gap-0.5 p-1.5 rounded hover:bg-[var(--color-hover-bg)] transition-colors"
-          title="Import / Export"
-        >
-          <span className="text-base">📦</span>
-          <span className="text-[9px]" style={{ color: 'var(--color-text-primary)' }}>Import</span>
-        </button>
-        <button
-          onClick={() => onNetDebug?.()}
-          className="flex flex-col items-center gap-0.5 p-1.5 rounded hover:bg-[var(--color-hover-bg)] transition-colors"
-          title="Network Debug"
-        >
-          <span className="text-base">🔌</span>
-          <span className="text-[9px]" style={{ color: 'var(--color-text-primary)' }}>Network</span>
-        </button>
-        <button
-          onClick={() => onSerialDebug?.()}
-          className="flex flex-col items-center gap-0.5 p-1.5 rounded hover:bg-[var(--color-hover-bg)] transition-colors"
-          title="Serial Debug"
-        >
-          <span className="text-base">⚡</span>
-          <span className="text-[9px]" style={{ color: 'var(--color-text-primary)' }}>Serial</span>
-        </button>
+        <div className="flex items-center gap-0.5">
+          {[
+            { label: t('sidebar.importExport'), text: '📦', onClick: onImportExport },
+            { label: t('sidebar.network'), text: '🔌', onClick: () => onNetDebug?.() },
+            { label: t('sidebar.serial'), text: '⚡', onClick: () => onSerialDebug?.() },
+            { label: t('sidebar.canbus'), text: '🚗', onClick: () => onCanDebug?.() },
+            { label: t('sidebar.ethercat'), text: '⚙️', onClick: () => onEthercatDebug?.() },
+          ].map((item) => (
+            <button
+              key={item.label}
+              onClick={item.onClick}
+              className="flex-1 h-7 rounded-md flex items-center justify-center text-[11px] transition-colors hover:bg-[var(--color-hover-bg)]"
+              title={item.label}
+            >
+              {item.text}
+            </button>
+          ))}
+        </div>
+        <LicenseStatusBar onClick={() => onLicenseClick?.()} />
       </div>
 
       {/* Context Menu */}
@@ -242,7 +259,7 @@ export default function Sidebar({
               onConnect?.(contextMenu.hostId);
               setContextMenu(null);
             }}
-          >Connect</button>
+          >{t('sidebar.connect')}</button>
           <button
             className="w-full text-left px-3 py-1.5 text-xs hover:bg-[var(--color-hover-bg)] transition-colors"
             style={{ color: 'var(--color-text-secondary)' }}
@@ -251,7 +268,7 @@ export default function Sidebar({
               if (host) onEditConnection(host);
               setContextMenu(null);
             }}
-          >Edit</button>
+          >{t('sidebar.edit')}</button>
           <button
             className="w-full text-left px-3 py-1.5 text-xs hover:bg-[var(--color-hover-bg)] transition-colors"
             style={{ color: '#ef4444' }}
@@ -259,7 +276,7 @@ export default function Sidebar({
               removeHost(contextMenu.hostId);
               setContextMenu(null);
             }}
-          >Delete</button>
+          >{t('sidebar.delete')}</button>
         </div>
       )}
     </div>

@@ -3,6 +3,7 @@
 @tailwind utilities;
 
 :root {
+  color-scheme: dark;
   --color-surface: #1a1b2e;
   --color-surface-hover: #232440;
   --color-surface-active: #2a2b4a;
@@ -23,23 +24,24 @@
 }
 
 .light {
+  color-scheme: light;
   --color-surface: #d5dbd7;
   --color-surface-hover: #c8ceca;
   --color-surface-active: #bbc2bd;
-  --color-sidebar: #c2c8c5;
+  --color-sidebar: #c9cfcb;
   --color-accent: #4f46e5;
-  --color-border: rgba(0, 0, 0, 0.1);
-  --color-text-primary: #2e3532;
-  --color-text-secondary: #4c5953;
-  --color-text-muted: #7b8780;
-  --color-text-dim: #9ba5a0;
-  --color-hover-bg: rgba(0, 0, 0, 0.06);
-  --color-context-bg: #c2c8c5;
-  --color-input-bg: rgba(0, 0, 0, 0.05);
-  --color-input-border: rgba(0, 0, 0, 0.12);
+  --color-border: rgba(0, 0, 0, 0.08);
+  --color-text-primary: #1a1f1c;
+  --color-text-secondary: #4a524d;
+  --color-text-muted: #6e7a73;
+  --color-text-dim: #95a09a;
+  --color-hover-bg: rgba(0, 0, 0, 0.05);
+  --color-context-bg: #c9cfcb;
+  --color-input-bg: rgba(0, 0, 0, 0.04);
+  --color-input-border: rgba(0, 0, 0, 0.1);
   --color-overlay: rgba(0, 0, 0, 0.3);
   --color-file-dir: #2563eb;
-  --color-file-name: #374a40;
+  --color-file-name: #2e3532;
 }
 
 body {
@@ -88,4 +90,27 @@ body {
 /* Hide the blue cursor outline on unfocused terminals */
 .xterm-cursor-outline {
   outline: none !important;
+}
+
+/* Select dropdown option styling for dark/light themes */
+select,
+select option {
+  background-color: var(--color-surface) !important;
+  color: var(--color-text-primary) !important;
+}
+
+/* Thin scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-input-border);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-dim);
 }

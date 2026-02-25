@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useNetDebugStore, hexDecode } from '../store/net-debug-store';
+import { useT } from '../i18n';
 import type { NetProtocol, NetDataEncoding, NetMessage } from '../../shared/types';
 
 function StatusDot({ status }: { status: string }) {
@@ -16,31 +17,23 @@ function MessageItem({ msg, displayEncoding }: { msg: NetMessage; displayEncodin
   const time = new Date(msg.timestamp).toLocaleTimeString();
 
   return (
-    <div
-      className="mx-2 my-0.5 px-2 py-1 text-xs font-mono rounded-md"
-      style={{
-        backgroundColor: isSend ? 'rgba(59,130,246,0.08)' : 'rgba(74,222,128,0.08)',
-        border: `1px solid ${isSend ? 'rgba(59,130,246,0.15)' : 'rgba(74,222,128,0.15)'}`,
-      }}
-    >
-      <div className="flex items-center gap-2 mb-1">
-        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold" style={{
-          backgroundColor: isSend ? 'rgba(59,130,246,0.15)' : 'rgba(74,222,128,0.15)',
-          color: isSend ? '#60a5fa' : '#4ade80',
-        }}>
-          {isSend ? '↑ SEND' : '↓ RECV'}
-        </span>
+    <div className="flex px-2 py-0.5 font-mono text-[10px]" style={{ borderBottom: '1px solid var(--color-border)' }}>
+      <span className="shrink-0 mr-1" style={{ whiteSpace: 'nowrap' }}>
+        <span style={{ color: 'var(--color-text-dim)' }}>{time}</span>{' '}
+        <span style={{ color: isSend ? '#2563eb' : '#16a34a', fontWeight: 500 }}>
+          {isSend ? '→ SEND' : '← RECV'}
+        </span>{' '}
         {msg.remoteAddress && (
-          <span className="text-[10px]" style={{ color: 'var(--color-text-dim)' }}>{msg.remoteAddress}</span>
+          <span style={{ color: 'var(--color-text-dim)' }}>{msg.remoteAddress} </span>
         )}
-        <span className="ml-auto text-[10px]" style={{ color: 'var(--color-text-dim)' }}>{time}</span>
-      </div>
-      <div className="leading-relaxed" style={{ color: 'var(--color-text-secondary)', wordBreak: 'break-all' }}>{displayData}</div>
+      </span>
+      <span style={{ color: 'var(--color-text-primary)', wordBreak: 'break-all' }}>{displayData}</span>
     </div>
   );
 }
 
 function CreateSessionForm({ onCreated }: { onCreated: () => void }) {
+  const t = useT();
   const createSession = useNetDebugStore((s) => s.createSession);
   const [protocol, setProtocol] = useState<NetProtocol>('tcp-client');
   const [host, setHost] = useState('127.0.0.1');
@@ -75,71 +68,150 @@ function CreateSessionForm({ onCreated }: { onCreated: () => void }) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="p-3 space-y-2">
+    <form onSubmit={handleSubmit} className="px-3 py-2 space-y-1.5">
       <div className="flex gap-1">
         {(['tcp-client', 'tcp-server', 'udp'] as NetProtocol[]).map((p) => (
           <button
             key={p}
             type="button"
             onClick={() => setProtocol(p)}
-            className="flex-1 px-2 py-1 text-xs rounded-md transition-colors"
+            className="flex-1 px-2 py-0.5 text-[10px] rounded transition-colors"
             style={{
               backgroundColor: protocol === p ? 'var(--color-accent)' : 'var(--color-input-bg)',
               color: protocol === p ? '#fff' : 'var(--color-text-secondary)',
               border: '1px solid var(--color-input-border)',
             }}
           >
-            {p === 'tcp-client' ? 'TCP Client' : p === 'tcp-server' ? 'TCP Server' : 'UDP'}
+            {p === 'tcp-client' ? t('net.tcpClient') : p === 'tcp-server' ? t('net.tcpServer') : t('net.udp')}
           </button>
         ))}
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex gap-1.5 items-center">
         <input
           value={host}
           onChange={(e) => setHost(e.target.value)}
-          placeholder="Host"
-          className="flex-1 px-2 py-1 text-xs rounded-md outline-none"
+          placeholder={t('net.host')}
+          className="flex-1 px-2 py-0.5 text-[10px] rounded outline-none"
           style={inputStyle}
         />
         <input
           value={port}
           onChange={(e) => setPort(e.target.value)}
-          placeholder="Port"
-          className="w-20 px-2 py-1 text-xs rounded-md outline-none"
+          placeholder={t('net.port')}
+          className="w-16 px-2 py-0.5 text-[10px] rounded outline-none"
           style={inputStyle}
         />
+        {protocol === 'udp' && (
+          <input
+            value={localPort}
+            onChange={(e) => setLocalPort(e.target.value)}
+            placeholder={t('net.localBind')}
+            className="w-24 px-2 py-0.5 text-[10px] rounded outline-none"
+            style={inputStyle}
+          />
+        )}
+        <button
+          type="submit"
+          disabled={loading}
+          className="px-3 py-0.5 text-[10px] rounded bg-[var(--color-accent)] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
+        >
+          {loading ? t('common.connecting') : protocol === 'tcp-server' ? t('net.startListen') : t('common.connect')}
+        </button>
       </div>
 
-      {protocol === 'udp' && (
-        <input
-          value={localPort}
-          onChange={(e) => setLocalPort(e.target.value)}
-          placeholder="Local bind port (optional)"
-          className="w-full px-2 py-1 text-xs rounded-md outline-none"
-          style={inputStyle}
-        />
-      )}
-
-      {error && <p className="text-xs text-red-400">{error}</p>}
-
-      <button
-        type="submit"
-        disabled={loading}
-        className="w-full px-2 py-1.5 text-xs rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
-      >
-        {loading ? 'Connecting...' : protocol === 'tcp-server' ? 'Start Listening' : 'Connect'}
-      </button>
+      {error && <p className="text-[10px] text-red-400">{error}</p>}
     </form>
   );
 }
 
+function NetSendTemplatePanel({ sessionId }: { sessionId: string }) {
+  const t = useT();
+  const templates = useNetDebugStore((s) => s.sendTemplates.get(sessionId) || []);
+  const addTemplate = useNetDebugStore((s) => s.addTemplate);
+  const removeTemplate = useNetDebugStore((s) => s.removeTemplate);
+  const updateTemplate = useNetDebugStore((s) => s.updateTemplate);
+  const sendTpl = useNetDebugStore((s) => s.sendTemplate);
+  const toggleTimer = useNetDebugStore((s) => s.toggleTemplateTimer);
+  const session = useNetDebugStore((s) => s.sessions.find((ss) => ss.id === sessionId));
+  const [collapsed, setCollapsed] = useState(false);
+
+  const isActive = session && (session.status === 'connected' || session.status === 'listening');
+  const inputStyle = {
+    backgroundColor: 'var(--color-input-bg)',
+    border: '1px solid var(--color-input-border)',
+    color: 'var(--color-text-primary)',
+  };
+
+  return (
+    <div className="flex-shrink-0 flex flex-col" style={{ borderTop: '1px solid var(--color-border)', maxHeight: collapsed ? 28 : 180 }}>
+      <div className="flex items-center justify-between px-2 py-0.5 flex-shrink-0 cursor-pointer" style={{ borderBottom: collapsed ? 'none' : '1px solid var(--color-border)' }} onClick={() => setCollapsed(!collapsed)}>
+        <span className="text-[10px] font-medium" style={{ color: 'var(--color-text-dim)' }}>
+          {collapsed ? '▶' : '▼'} {t('tpl.title')}
+        </span>
+        <button onClick={(e) => { e.stopPropagation(); addTemplate(sessionId); setCollapsed(false); }}
+          className="text-[10px] px-1.5 py-0.5 rounded hover:bg-[var(--color-hover-bg)]"
+          style={{ color: 'var(--color-text-secondary)', border: '1px solid var(--color-input-border)' }}>
+          {t('tpl.add')}
+        </button>
+      </div>
+      {!collapsed && (
+        templates.length === 0 ? (
+          <div className="text-[10px] text-center py-2" style={{ color: 'var(--color-text-dim)' }}>{t('tpl.empty')}</div>
+        ) : (
+          <div className="text-[11px] flex flex-col min-h-0">
+            <div className="flex items-center gap-1 px-2 py-0.5 text-[9px] flex-shrink-0" style={{ color: 'var(--color-text-dim)', borderBottom: '1px solid var(--color-border)' }}>
+              <span className="w-12"></span>
+              <span className="w-20">{t('tpl.name')}</span>
+              <span className="w-12">{t('tpl.encoding')}</span>
+              <span className="flex-1">{t('tpl.data')}</span>
+              <span className="w-16">{t('tpl.intervalMs')}</span>
+              <span className="w-8"></span>
+            </div>
+            <div className="overflow-y-auto flex-1">
+              {templates.map((tpl) => (
+                <div key={tpl.id} className="flex items-center gap-1 px-2 py-0.5 hover:bg-[var(--color-hover-bg)]">
+                  <button onClick={() => isActive && sendTpl(sessionId, tpl.id)}
+                    className="w-6 text-center text-[10px]"
+                    style={{ color: 'var(--color-text-secondary)', cursor: isActive ? 'pointer' : 'default' }}
+                    title={t('tpl.sendOnce')}>📤</button>
+                  <button onClick={() => isActive && toggleTimer(sessionId, tpl.id)}
+                    className="w-6 text-center text-[10px]"
+                    style={{ color: tpl.enabled ? '#4ade80' : 'var(--color-text-dim)', cursor: isActive ? 'pointer' : 'default' }}
+                    title={tpl.enabled ? t('tpl.timerStop') : t('tpl.timerStart')}>
+                    {tpl.enabled ? '⏹' : '⏱'}</button>
+                  <input value={tpl.name} onChange={(e) => updateTemplate(sessionId, tpl.id, { name: e.target.value })}
+                    placeholder="name" className="w-20 px-1 py-0.5 text-[10px] rounded" style={inputStyle} disabled={tpl.enabled} />
+                  <select value={tpl.encoding} onChange={(e) => updateTemplate(sessionId, tpl.id, { encoding: e.target.value as NetDataEncoding })}
+                    className="w-12 px-0.5 py-0.5 text-[10px] rounded outline-none" style={inputStyle} disabled={tpl.enabled}>
+                    <option value="utf8">UTF8</option>
+                    <option value="hex">HEX</option>
+                  </select>
+                  <input value={tpl.data} onChange={(e) => updateTemplate(sessionId, tpl.id, { data: e.target.value })}
+                    placeholder={tpl.encoding === 'hex' ? 'hex...' : 'text...'}
+                    className="flex-1 px-1 py-0.5 text-[10px] rounded font-mono" style={inputStyle} disabled={tpl.enabled} />
+                  <input value={tpl.intervalMs} onChange={(e) => updateTemplate(sessionId, tpl.id, { intervalMs: parseInt(e.target.value) || 1000 })}
+                    className="w-16 px-1 py-0.5 text-[10px] rounded text-center" style={inputStyle} disabled={tpl.enabled} />
+                  <button onClick={() => removeTemplate(sessionId, tpl.id)}
+                    className="w-8 text-center text-[9px] text-red-400 hover:text-red-300" title={t('tpl.delete')}>🗑</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      )}
+    </div>
+  );
+}
+
 function SessionView({ sessionId }: { sessionId: string }) {
+  const t = useT();
   const session = useNetDebugStore((s) => s.sessions.find((ss) => ss.id === sessionId));
   const messages = useNetDebugStore((s) => s.messages.get(sessionId) || []);
   const sendData = useNetDebugStore((s) => s.sendData);
   const clearMessages = useNetDebugStore((s) => s.clearMessages);
   const closeSession = useNetDebugStore((s) => s.closeSession);
+  const reopenSession = useNetDebugStore((s) => s.reopenSession);
   const ui = useNetDebugStore((s) => s.sessionUI.get(sessionId));
   const updateUI = useNetDebugStore((s) => s.updateSessionUI);
   const startTimer = useNetDebugStore((s) => s.startTimer);
@@ -161,7 +233,10 @@ function SessionView({ sessionId }: { sessionId: string }) {
   const filteredMessages = messageFilter === 'all' ? messages : messages.filter((m) => m.direction === messageFilter);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const container = messagesEndRef.current?.parentElement;
+    if (container) {
+      container.scrollTop = container.scrollHeight;
+    }
   }, [messages.length]);
 
   const handleSend = useCallback(() => {
@@ -180,9 +255,9 @@ function SessionView({ sessionId }: { sessionId: string }) {
   const isActive = session.status === 'connected' || session.status === 'listening';
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    <div className="flex-1 flex flex-col overflow-hidden min-h-0">
       {/* Header */}
-      <div className="flex-shrink-0 flex items-center gap-2 px-3 py-2 text-xs" style={{ borderBottom: '1px solid var(--color-border)' }}>
+      <div className="flex-shrink-0 flex items-center gap-2 px-3 py-1.5 text-[10px]" style={{ borderBottom: '1px solid var(--color-border)' }}>
         <StatusDot status={session.status} />
         <span style={{ color: 'var(--color-text-primary)' }}>
           {session.protocol.toUpperCase()} {session.host}:{session.port}
@@ -190,15 +265,16 @@ function SessionView({ sessionId }: { sessionId: string }) {
         {session.localPort && session.protocol === 'udp' && (
           <span style={{ color: 'var(--color-text-secondary)' }}>(local: {session.localPort})</span>
         )}
-        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium" style={{
-          backgroundColor: isActive ? 'rgba(34,197,94,0.2)' : 'rgba(107,114,128,0.2)',
+        <span className="px-1.5 py-0.5 rounded text-[10px]" style={{
+          backgroundColor: 'var(--color-input-bg)',
           color: isActive ? '#16a34a' : '#6b7280',
+          border: '1px solid var(--color-input-border)',
         }}>
           {session.status}
         </span>
         {session.clients && session.clients.length > 0 && (
           <span style={{ color: 'var(--color-text-dim)' }}>
-            {session.clients.length} client(s)
+            {session.clients.length} {t('net.clients')}
           </span>
         )}
         <div className="ml-auto flex gap-1">
@@ -227,7 +303,7 @@ function SessionView({ sessionId }: { sessionId: string }) {
           </select>
           <button onClick={() => clearMessages(sessionId)} className="px-1.5 py-0.5 text-[10px] rounded"
             style={{ backgroundColor: 'var(--color-input-bg)', color: 'var(--color-text-primary)', border: '1px solid var(--color-border)' }}>
-            Clear
+            {t('common.clear')}
           </button>
           <button onClick={async () => {
             if (recording) {
@@ -245,24 +321,29 @@ function SessionView({ sessionId }: { sessionId: string }) {
               color: recording ? '#ef4444' : 'var(--color-text-primary)',
               border: `1px solid ${recording ? 'rgba(239,68,68,0.3)' : 'var(--color-border)'}`,
             }}
-            title={recording ? 'Stop recording & save' : 'Start recording to file'}>
-            {recording ? '⏺ Rec' : '⏺'}
+            title={recording ? t('net.stopRecTitle') : t('net.startRecTitle')}>
+            {recording ? t('net.rec') : '⏺'}
           </button>
-          {isActive && (
+          {isActive ? (
             <button onClick={() => closeSession(sessionId)} className="px-1.5 py-0.5 text-[10px] rounded"
               style={{ backgroundColor: 'var(--color-input-bg)', color: '#ef4444', border: '1px solid var(--color-border)' }}>
-              Close
+              {t('net.close')}
+            </button>
+          ) : (
+            <button onClick={() => reopenSession(sessionId)} className="px-1.5 py-0.5 text-[10px] rounded"
+              style={{ backgroundColor: 'var(--color-input-bg)', color: '#16a34a', border: '1px solid var(--color-border)' }}>
+              {t('net.reconnect')}
             </button>
           )}
         </div>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto py-1" style={{ backgroundColor: 'var(--color-surface)' }}>
+      <div className="flex-1 min-h-0 overflow-y-auto py-1" style={{ backgroundColor: 'var(--color-surface)' }}>
         {filteredMessages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full gap-2" style={{ color: 'var(--color-text-dim)' }}>
             <span className="text-3xl opacity-30">💬</span>
-            <span className="text-xs">{messages.length === 0 ? 'No messages yet' : 'No matching messages'}</span>
+            <span className="text-xs">{messages.length === 0 ? t('net.noMessages') : t('net.noMatch')}</span>
           </div>
         )}
         {filteredMessages.map((msg) => (
@@ -271,73 +352,75 @@ function SessionView({ sessionId }: { sessionId: string }) {
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Send Templates */}
+      <NetSendTemplatePanel sessionId={sessionId} />
+
       {/* Send bar */}
       {isActive && (
-        <div className="flex-shrink-0" style={{ borderTop: '1px solid var(--color-border)', backgroundColor: 'var(--color-sidebar)' }}>
-          <div className="flex items-center gap-1.5 px-3 py-2">
-            {session.protocol === 'tcp-server' && session.clients && session.clients.length > 0 && (
-              <select
-                value={targetClient}
-                onChange={(e) => updateUI(sessionId, { targetClient: e.target.value })}
-                className="px-1.5 py-1 text-[10px] rounded-md outline-none"
-                style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text-secondary)' }}
-              >
-                <option value="">All clients</option>
-                {session.clients.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            )}
+        <div className="flex items-center gap-2 px-2 py-1.5 flex-shrink-0 flex-wrap" style={{ borderTop: '1px solid var(--color-border)' }}>
+          {session.protocol === 'tcp-server' && session.clients && session.clients.length > 0 && (
             <select
-              value={encoding}
-              onChange={(e) => updateUI(sessionId, { encoding: e.target.value as NetDataEncoding })}
-              className="px-1.5 py-1 text-[10px] rounded-md outline-none"
+              value={targetClient}
+              onChange={(e) => updateUI(sessionId, { targetClient: e.target.value })}
+              className="px-1 py-0.5 text-[10px] rounded outline-none"
               style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text-secondary)' }}
             >
-              <option value="utf8">UTF-8</option>
-              <option value="hex">HEX</option>
+              <option value="">All clients</option>
+              {session.clients.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
-            <input
-              value={input}
-              onChange={(e) => updateUI(sessionId, { input: e.target.value })}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleSendAndClear(); }}
-              placeholder={encoding === 'hex' ? 'Hex data (e.g. 48656C6C6F)' : 'Text to send...'}
-              className="flex-1 px-2.5 py-1.5 text-xs rounded-lg outline-none font-mono focus:ring-1 focus:ring-[var(--color-accent)]"
-              style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text-primary)' }}
-            />
+          )}
+          <select
+            value={encoding}
+            onChange={(e) => updateUI(sessionId, { encoding: e.target.value as NetDataEncoding })}
+            className="px-1 py-0.5 text-[10px] rounded outline-none"
+            style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text-secondary)' }}
+          >
+            <option value="utf8">UTF-8</option>
+            <option value="hex">HEX</option>
+          </select>
+          <input
+            value={input}
+            onChange={(e) => updateUI(sessionId, { input: e.target.value })}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleSendAndClear(); }}
+            placeholder={encoding === 'hex' ? t('net.hexPlaceholder') : t('net.textPlaceholder')}
+            className="flex-1 min-w-[120px] px-1.5 py-0.5 text-[11px] rounded outline-none font-mono"
+            style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text-primary)' }}
+          />
+          <button
+            onClick={handleSendAndClear}
+            disabled={!input.trim()}
+            className="px-3 py-1 text-[11px] rounded text-white bg-[var(--color-accent)] hover:opacity-90 disabled:opacity-40"
+          >
+            {t('common.send')}
+          </button>
+          <span className="text-[10px]" style={{ color: 'var(--color-text-dim)' }}>|</span>
+          <input
+            value={timerInterval}
+            onChange={(e) => updateUI(sessionId, { timerInterval: e.target.value })}
+            className="w-14 px-1.5 py-0.5 text-[11px] rounded text-center"
+            style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text-primary)' }}
+            disabled={timerRunning}
+          />
+          <span className="text-[10px]" style={{ color: 'var(--color-text-dim)' }}>ms</span>
+          {!timerRunning ? (
             <button
-              onClick={handleSendAndClear}
+              onClick={() => startTimer(sessionId)}
               disabled={!input.trim()}
-              className="px-4 py-1.5 text-xs rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 transition-opacity disabled:opacity-40"
+              className="px-2 py-1 text-[11px] rounded text-white bg-[var(--color-accent)] hover:opacity-90 disabled:opacity-50"
             >
-              Send
+              ⏱ Timer
             </button>
-          </div>
-          {/* Timer send row */}
-          <div className="flex items-center gap-1.5 px-3 pb-2">
-            <span className="text-[10px]" style={{ color: 'var(--color-text-dim)' }}>⏱</span>
-            <input
-              value={timerInterval}
-              onChange={(e) => updateUI(sessionId, { timerInterval: e.target.value })}
-              className="w-16 px-1.5 py-1 text-[10px] rounded-md outline-none text-center font-mono"
-              style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text-primary)' }}
-              disabled={timerRunning}
-            />
-            <span className="text-[10px]" style={{ color: 'var(--color-text-dim)' }}>ms</span>
+          ) : (
             <button
-              onClick={() => timerRunning ? stopTimer(sessionId) : startTimer(sessionId)}
-              disabled={!input.trim() && !timerRunning}
-              className="px-3 py-1 text-[10px] rounded-md transition-colors"
-              style={{
-                backgroundColor: timerRunning ? 'rgba(239,68,68,0.15)' : 'var(--color-accent)',
-                color: timerRunning ? '#ef4444' : '#fff',
-                border: `1px solid ${timerRunning ? 'rgba(239,68,68,0.3)' : 'var(--color-accent)'}`,
-              }}
+              onClick={() => stopTimer(sessionId)}
+              className="px-2 py-1 text-[11px] rounded text-white bg-red-500 hover:bg-red-600"
             >
-              {timerRunning ? '⏹ Stop' : '▶ Start'}
+              ⏹ Stop
             </button>
-            {timerRunning && (
-              <span className="text-[10px]" style={{ color: '#4ade80' }}>● Sending...</span>
-            )}
-          </div>
+          )}
+          {timerRunning && (
+            <span className="text-[10px]" style={{ color: '#16a34a' }}>{t('net.sending')}</span>
+          )}
         </div>
       )}
 
@@ -352,6 +435,7 @@ function SessionView({ sessionId }: { sessionId: string }) {
 
 
 export default function NetDebugPanel({ onClose }: { onClose: () => void }) {
+  const t = useT();
   const sessions = useNetDebugStore((s) => s.sessions);
   const activeSessionId = useNetDebugStore((s) => s.activeSessionId);
   const setActiveSession = useNetDebugStore((s) => s.setActiveSession);
@@ -359,17 +443,17 @@ export default function NetDebugPanel({ onClose }: { onClose: () => void }) {
   const [showCreate, setShowCreate] = useState(false);
 
   return (
-    <div className="h-full flex flex-col" style={{ backgroundColor: 'var(--color-sidebar)' }}>
+    <div className="h-full flex flex-col" style={{ backgroundColor: 'var(--color-bg)' }}>
       {/* Header */}
       <div className="flex-shrink-0 flex items-center justify-between px-3 py-2" style={{ borderBottom: '1px solid var(--color-border)' }}>
-        <span className="text-xs font-semibold" style={{ color: 'var(--color-text-primary)' }}>🔌 Net Debug</span>
+        <span className="text-xs font-semibold" style={{ color: 'var(--color-text-primary)' }}>{t('net.title')}</span>
         <div className="flex gap-1">
           <button
             onClick={() => setShowCreate(!showCreate)}
             className="px-2 py-0.5 text-xs rounded-md bg-[var(--color-accent)] text-white hover:opacity-90"
             style={{ lineHeight: '1', paddingTop: '4px', paddingBottom: '4px' }}
           >
-            + New
+            {t('net.new')}
           </button>
           <button
             onClick={onClose}
@@ -415,7 +499,7 @@ export default function NetDebugPanel({ onClose }: { onClose: () => void }) {
         <SessionView sessionId={activeSessionId} />
       ) : (
         <div className="flex-1 flex items-center justify-center text-xs" style={{ color: 'var(--color-text-dim)' }}>
-          {sessions.length === 0 ? 'Click "+ New" to create a connection' : 'Select a session'}
+          {sessions.length === 0 ? t('net.emptyNew') : t('net.selectSession')}
         </div>
       )}
     </div>

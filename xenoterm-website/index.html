@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>XenoTerm - Universal Embedded Debug Station</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      background: #0a0a1a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    .bg-glow {
+      position: fixed; top: -200px; right: -200px;
+      width: 600px; height: 600px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(99,102,241,0.08), transparent);
+      pointer-events: none; z-index: 0;
+    }
+    .bg-glow2 {
+      position: fixed; bottom: -150px; left: -150px;
+      width: 500px; height: 500px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(139,92,246,0.06), transparent);
+      pointer-events: none; z-index: 0;
+    }
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      backdrop-filter: blur(20px); background: rgba(10,10,26,0.8);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .nav-inner {
+      max-width: 1100px; margin: 0 auto; padding: 0 24px;
+      height: 60px; display: flex; align-items: center; justify-content: space-between;
+    }
+    .logo { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; }
+    .logo span { color: #6366f1; }
+    .nav-links { display: flex; gap: 28px; }
+    .nav-links a {
+      color: #94a3b8; text-decoration: none; font-size: 13px; font-weight: 500;
+      transition: color 0.2s;
+    }
+    .nav-links a:hover { color: #e2e8f0; }
+    .hero {
+      padding: 160px 24px 80px; position: relative; z-index: 1;
+      text-align: center;
+    }
+    .hero-badge {
+      display: inline-block; padding: 4px 14px; border-radius: 20px; font-size: 11px;
+      font-weight: 600; letter-spacing: 0.5px; margin-bottom: 20px;
+      background: rgba(99,102,241,0.12); color: #818cf8; border: 1px solid rgba(99,102,241,0.2);
+    }
+    .hero h1 {
+      font-size: 48px; font-weight: 800; letter-spacing: -1.5px; line-height: 1.1;
+      margin-bottom: 16px;
+      background: linear-gradient(135deg, #e2e8f0, #6366f1);
+      -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .hero p { font-size: 16px; color: #94a3b8; max-width: 520px; margin: 0 auto 36px; line-height: 1.7; }
+    .hero-buttons { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .btn-primary {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 12px 28px; border-radius: 10px; font-size: 14px; font-weight: 600;
+      text-decoration: none; transition: all 0.2s;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #fff;
+      box-shadow: 0 4px 20px rgba(99,102,241,0.3);
+    }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(99,102,241,0.4); }
+    .btn-secondary {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 12px 28px; border-radius: 10px; font-size: 14px; font-weight: 600;
+      text-decoration: none; transition: all 0.2s;
+      background: rgba(255,255,255,0.06); color: #e2e8f0;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .btn-secondary:hover { background: rgba(255,255,255,0.1); }
+    .hero-meta { margin-top: 20px; font-size: 11px; color: #64748b; }
+    .feature-card {
+      padding: 28px; border-radius: 14px; background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.06); transition: all 0.2s;
+    }
+    .feature-card:hover { background: rgba(255,255,255,0.06); transform: translateY(-2px); }
+  </style>
+</head>
+<body>
+  <div class="bg-glow"></div>
+  <div class="bg-glow2"></div>
+
+  <nav>
+    <div class="nav-inner">
+      <div class="logo"><span>Xeno</span>Term</div>
+      <div class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#download">Download</a>
+        <a href="#pricing">Pricing</a>
+      </div>
+    </div>
+  </nav>
+
+  <section class="hero">
+    <div class="hero-badge">v1.2.0 · Windows</div>
+    <h1>Universal Embedded<br>Debug Station</h1>
+    <p>SSH terminal, network debugging, serial port, CAN bus analysis, and EtherCAT master — all in one elegant desktop app.</p>
+    <div class="hero-buttons">
+      <a href="/downloads/XenoTerm.Setup.1.2.0.exe" class="btn-primary">⬇ Download for Windows</a>
+      <a href="#features" class="btn-secondary">Learn More</a>
+    </div>
+    <p class="hero-meta">Windows 10+ · 64-bit · Free 15-day trial</p>
+  </section>
+
+  <section id="features" style="padding: 80px 24px; position: relative; z-index: 1;">
+    <div style="max-width: 1100px; margin: 0 auto;">
+      <h2 style="text-align:center; font-size:32px; font-weight:800; letter-spacing:-1px; margin-bottom:8px;">Everything You Need</h2>
+      <p style="text-align:center; font-size:14px; color:#94a3b8; margin-bottom:48px;">One tool for all embedded development debugging scenarios</p>
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:16px;">
+        <div class="feature-card">
+          <div style="width:40px;height:40px;border-radius:10px;background:rgba(59,130,246,0.12);display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:16px;">🖥</div>
+          <h3 style="font-size:15px;font-weight:700;margin-bottom:6px;">SSH Terminal</h3>
+          <p style="font-size:12px;color:#94a3b8;line-height:1.7;">Multi-tab, split-pane terminal with SFTP file manager. Jump host support, command history, session recording.</p>
+        </div>
+        <div class="feature-card">
+          <div style="width:40px;height:40px;border-radius:10px;background:rgba(139,92,246,0.12);display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:16px;">🔌</div>
+          <h3 style="font-size:15px;font-weight:700;margin-bottom:6px;">Network Debug</h3>
+          <p style="font-size:12px;color:#94a3b8;line-height:1.7;">TCP/UDP client and server. Hex/ASCII mode, auto-send timer, multi-client management.</p>
+        </div>
+        <div class="feature-card">
+          <div style="width:40px;height:40px;border-radius:10px;background:rgba(245,158,11,0.12);display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:16px;">⚡</div>
+          <h3 style="font-size:15px;font-weight:700;margin-bottom:6px;">Serial Port</h3>
+          <p style="font-size:12px;color:#94a3b8;line-height:1.7;">Full serial port debugging with DTR/RTS control, baud rate configuration, hex and text display.</p>
+        </div>
+        <div class="feature-card">
+          <div style="width:40px;height:40px;border-radius:10px;background:rgba(239,68,68,0.12);display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:16px;">🚗</div>
+          <h3 style="font-size:15px;font-weight:700;margin-bottom:6px;">CAN Bus</h3>
+          <p style="font-size:12px;color:#94a3b8;line-height:1.7;">DBC file parsing, real-time signal chart, message statistics, send list, ASC log replay. Supports ZLG and GC adapters.</p>
+        </div>
+        <div class="feature-card">
+          <div style="width:40px;height:40px;border-radius:10px;background:rgba(34,197,94,0.12);display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:16px;">⚙️</div>
+          <h3 style="font-size:15px;font-weight:700;margin-bottom:6px;">EtherCAT Master</h3>
+          <p style="font-size:12px;color:#94a3b8;line-height:1.7;">SDO read/write, PDO monitoring, object dictionary browser, ESI import, FoE firmware upload, SII access, emergency messages.</p>
+        </div>
+        <div class="feature-card">
+          <div style="width:40px;height:40px;border-radius:10px;background:rgba(99,102,241,0.12);display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:16px;">🎨</div>
+          <h3 style="font-size:15px;font-weight:700;margin-bottom:6px;">Modern UI</h3>
+          <p style="font-size:12px;color:#94a3b8;line-height:1.7;">Dark/light theme, drag-and-drop tab splitting, resizable panels. Clean and intuitive interface.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="pricing" style="padding: 80px 24px; position: relative; z-index: 1;">
+    <div style="max-width: 500px; margin: 0 auto; text-align: center;">
+      <h2 style="font-size:32px; font-weight:800; letter-spacing:-1px; margin-bottom:8px;">Simple Pricing</h2>
+      <p style="font-size:14px; color:#94a3b8; margin-bottom:36px;">Try free for 15 days, then purchase a permanent license</p>
+      <div style="padding:36px; border-radius:16px; background:rgba(255,255,255,0.03); border:1px solid rgba(99,102,241,0.3);">
+        <p style="font-size:11px; color:#818cf8; font-weight:600; letter-spacing:1px; margin-bottom:8px;">PERMANENT LICENSE</p>
+        <p style="font-size:48px; font-weight:800; margin-bottom:4px;">¥99</p>
+        <p style="font-size:12px; color:#64748b; margin-bottom:24px;">One-time payment · One machine</p>
+        <div style="text-align:left; max-width:260px; margin:0 auto 28px;">
+          <p style="font-size:12px; color:#94a3b8; padding:6px 0;">✅ All features included</p>
+          <p style="font-size:12px; color:#94a3b8; padding:6px 0;">✅ Lifetime updates</p>
+          <p style="font-size:12px; color:#94a3b8; padding:6px 0;">✅ 15-day free trial</p>
+          <p style="font-size:12px; color:#94a3b8; padding:6px 0;">✅ Alipay & WeChat Pay</p>
+        </div>
+        <a href="/downloads/XenoTerm.Setup.1.2.0.exe" class="btn-primary" style="width:100%;justify-content:center;">Download & Try Free</a>
+      </div>
+    </div>
+  </section>
+
+  <section id="download" style="padding: 60px 24px 80px; position: relative; z-index: 1;">
+    <div style="max-width: 600px; margin: 0 auto; text-align: center;">
+      <h2 style="font-size:28px; font-weight:800; letter-spacing:-0.5px; margin-bottom:24px;">Download</h2>
+      <div style="padding:24px; border-radius:14px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06);">
+        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+          <div style="text-align:left;">
+            <p style="font-size:14px; font-weight:600;">XenoTerm v1.2.0</p>
+            <p style="font-size:11px; color:#64748b;">Windows 10+ · 64-bit · ~80MB</p>
+          </div>
+          <a href="/downloads/XenoTerm.Setup.1.2.0.exe" class="btn-primary" style="font-size:13px; padding:10px 20px;">⬇ Download .exe</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer style="padding:24px; text-align:center; border-top:1px solid rgba(255,255,255,0.06); position:relative; z-index:1;">
+    <p style="font-size:11px; color:#475569;">© 2025 XenoTerm. All rights reserved.</p>
+  </footer>
+</body>
+</html>

@@ -5,6 +5,7 @@ import {
   removeLeaf,
   updateRatioAtPath,
   replaceSession,
+  replaceSessionId,
   findLeafBySessionId,
   collectLeaves,
 } from './layout-tree-utils';
@@ -29,6 +30,7 @@ export interface LayoutStoreSlice {
   setActivePaneId: (paneId: string) => void;
   findPaneBySessionId: (sessionId: string) => LeafPane | null;
   replaceSessionInPane: (paneId: string, newSessionId: string) => void;
+  replaceSessionEverywhere: (oldSessionId: string, newSessionId: string) => void;
 
   // Workspace actions
   addSessionTab: (sessionId: string) => void;
@@ -110,6 +112,50 @@ export const useLayoutStore = create<LayoutStoreSlice>((set, get) => ({
     if (layoutTree === null) return;
     const newTree = replaceSession(layoutTree, paneId, newSessionId);
     set({ layoutTree: newTree });
+  },
+
+  replaceSessionEverywhere: (oldSessionId: string, newSessionId: string) => {
+    const state = get();
+
+    // Replace in layout tree
+    let newLayoutTree = state.layoutTree;
+    if (newLayoutTree) {
+      newLayoutTree = replaceSessionId(newLayoutTree, oldSessionId, newSessionId);
+    }
+
+    // Replace in tabs
+    const newTabs = state.tabs.map((t) => {
+      if (t.type === 'session' && t.sessionId === oldSessionId) {
+        return { ...t, sessionId: newSessionId };
+      }
+      return t;
+    });
+
+    // Replace in workspaces
+    const newWorkspaces = state.workspaces.map((w) => {
+      if (!w.sessionIds.includes(oldSessionId)) return w;
+      return {
+        ...w,
+        sessionIds: w.sessionIds.map((id) => (id === oldSessionId ? newSessionId : id)),
+        layoutTree: replaceSessionId(w.layoutTree, oldSessionId, newSessionId),
+      };
+    });
+
+    // Replace activeTabId if it was the old session
+    const newActiveTabId = state.activeTabId === oldSessionId ? newSessionId : state.activeTabId;
+
+    // Replace activePaneId if it was pane-{oldSessionId}
+    const oldPaneId = `pane-${oldSessionId}`;
+    const newPaneId = `pane-${newSessionId}`;
+    const newActivePaneId = state.activePaneId === oldPaneId ? newPaneId : state.activePaneId;
+
+    set({
+      layoutTree: newLayoutTree,
+      tabs: newTabs,
+      workspaces: newWorkspaces,
+      activeTabId: newActiveTabId,
+      activePaneId: newActivePaneId,
+    });
   },
 
   // --- Workspace / Tab actions ---

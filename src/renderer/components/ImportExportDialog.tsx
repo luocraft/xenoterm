@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAppStore } from '../store/app-store';
+import { useT } from '../i18n';
 import type { ImportResult } from '../../shared/types';
 
 interface ImportExportDialogProps {
@@ -7,6 +8,7 @@ interface ImportExportDialogProps {
 }
 
 export default function ImportExportDialog({ onClose }: ImportExportDialogProps) {
+  const t = useT();
   const loadHosts = useAppStore((s) => s.loadHosts);
   const [mode, setMode] = useState<'export' | 'import'>('export');
   const [result, setResult] = useState<ImportResult | null>(null);
@@ -62,7 +64,7 @@ export default function ImportExportDialog({ onClose }: ImportExportDialogProps)
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-4 flex justify-between items-center" style={{ borderBottom: '1px solid var(--color-border)' }}>
-          <h2 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>Import / Export</h2>
+          <h2 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>{t('importExport.title')}</h2>
           <button onClick={onClose} className="text-lg" style={{ color: 'var(--color-text-muted)' }}>×</button>
         </div>
 
@@ -76,7 +78,7 @@ export default function ImportExportDialog({ onClose }: ImportExportDialogProps)
               }`}
               style={mode !== 'export' ? { color: 'var(--color-text-secondary)' } : undefined}
             >
-              Export
+              {t('importExport.exportTab')}
             </button>
             <button
               onClick={() => { setMode('import'); setResult(null); }}
@@ -85,34 +87,34 @@ export default function ImportExportDialog({ onClose }: ImportExportDialogProps)
               }`}
               style={mode !== 'import' ? { color: 'var(--color-text-secondary)' } : undefined}
             >
-              Import
+              {t('importExport.importTab')}
             </button>
           </div>
 
           {mode === 'export' ? (
             <div className="text-center">
               <p className="text-xs mb-3" style={{ color: 'var(--color-text-secondary)' }}>
-                Export all connections as a JSON file.
+                {t('importExport.exportDesc')}
               </p>
               <button
                 onClick={handleExport}
                 disabled={exporting}
                 className="px-4 py-2 text-xs rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
               >
-                {exporting ? 'Exporting...' : 'Export Connections'}
+                {exporting ? t('importExport.exporting') : t('importExport.exportBtn')}
               </button>
             </div>
           ) : (
             <div className="text-center">
               <p className="text-xs mb-3" style={{ color: 'var(--color-text-secondary)' }}>
-                Import connections from a JSON file.
+                {t('importExport.importDesc')}
               </p>
               <button
                 onClick={handleImport}
                 disabled={importing}
                 className="px-4 py-2 text-xs rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
               >
-                {importing ? 'Importing...' : 'Select File & Import'}
+                {importing ? t('importExport.importing') : t('importExport.importBtn')}
               </button>
             </div>
           )}
@@ -121,13 +123,13 @@ export default function ImportExportDialog({ onClose }: ImportExportDialogProps)
           {result && (
             <div className="mt-4 p-3 rounded-lg text-xs" style={{ backgroundColor: 'var(--color-input-bg)' }}>
               {mode === 'export' ? (
-                <p className="text-green-400">✓ Exported to clipboard</p>
+                <p className="text-green-400">{t('importExport.exported')}</p>
               ) : (
                 <>
-                  <p className="text-green-400">✓ Imported {result.imported} entries</p>
+                  <p className="text-green-400">{t('importExport.imported', { count: result.imported })}</p>
                   {result.errors.length > 0 && (
                     <div className="mt-2 text-red-400">
-                      <p className="font-medium">Errors:</p>
+                      <p className="font-medium">{t('importExport.errors')}</p>
                       {result.errors.map((err, i) => (
                         <p key={i} className="ml-2">• {err}</p>
                       ))}

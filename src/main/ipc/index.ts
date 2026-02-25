@@ -1,13 +1,19 @@
 import { ipcMain, dialog, BrowserWindow } from 'electron';
 import type { HostEntry, AppConfig, NetProtocol, SerialConfig } from '../../shared/types';
-import { join } from 'path';
-import { existsSync } from 'fs';
+import { join, basename } from 'path';
+import { existsSync, readFileSync, statSync } from 'fs';
 import { ConfigStore } from '../services/config-store';
 import { ConnectionManager } from '../services/connection-manager';
 import { SSHService } from '../services/ssh-service';
 import { SFTPService } from '../services/sftp-service';
+import { createTransferProgress } from '../services/sftp-utils';
 import { NetDebugService } from '../services/net-debug-service';
 import { SerialService } from '../services/serial-service';
+import { CanService } from '../services/can/can-service';
+import type { CanFrame } from '../services/can/can-driver.interface';
+import { EthercatService } from '../services/ethercat/ethercat-service';
+import type { EcSession } from '../services/ethercat/types';
+import * as licenseService from '../services/license-service';
 
 const configStore = new ConfigStore();
 const connectionManager = new ConnectionManager(configStore);
@@ -15,13 +21,18 @@ const sshService = new SSHService();
 const sftpService = new SFTPService();
 const netDebugService = new NetDebugService();
 const serialService = new SerialService();
+const canService = new CanService();
+const ecatService = new EthercatService();
 
 // Wire up host resolver for jump host support
 sshService.setHostResolver((id) => connectionManager.getHost(id));
 
 function getMainWindow(): BrowserWindow | null {
   const windows = BrowserWindow.getAllWindows();
-  return windows.length > 0 ? windows[0] : null;
+  const win = windows.length > 0 ? windows[0] : null;
+  if (win && win.isDestroyed()) return null;
+  if (win && win.webContents.isDestroyed()) return null;
+  return win;
 }
 
 export function registerIpcHandlers(): void {
@@ -157,8 +168,21 @@ export function registerIpcHandlers(): void {
     sshService.disconnect(sessionId);
   });
 
+  ipcMain.handle('ssh:reconnect', async (_event, sessionId: string, password?: string) => {
+    try {
+      console.log('[SSH] Reconnecting session:', sessionId);
+      const session = await sshService.reconnect(sessionId, password);
+      console.log('[SSH] Reconnected, session:', session.id, 'status:', session.status);
+      await sshService.openShell(session.id);
+      console.log('[SSH] Shell re-opened for session:', session.id);
+      return session;
+    } catch (err) {
+      console.error('[SSH] Reconnect failed:', (err as Error).message);
+      throw new Error(`SSH reconnect failed: ${(err as Error).message}`);
+    }
+  });
+
   ipcMain.on('ssh:write', (_event, sessionId: string, data: string) => {
-    console.log('[IPC] ssh:write received for session:', sessionId, 'data length:', data.length);
     sshService.write(sessionId, data);
   });
 
@@ -183,11 +207,46 @@ export function registerIpcHandlers(): void {
       if (!client) throw new Error('Session not connected');
 
       const win = getMainWindow();
-      const progress = await sftpService.upload(client, localPath, remotePath);
 
-      // Set up progress forwarding
+      const sftp = await sftpService.getSFTP(client);
+      const stats = statSync(localPath);
+      const progress = createTransferProgress(basename(localPath), 'upload', stats.size);
+      sftpService.queue.addTransfer(progress);
+
       sftpService.onProgress(progress.transferId, (p) => {
         win?.webContents.send('sftp:progress', p);
+      });
+
+      progress.status = 'transferring';
+      sftpService.emitProgress(progress);
+
+      const startTime = Date.now();
+      let lastEmit = 0;
+
+      // Use fastPut for parallel transfer — don't await, return transferId immediately
+      sftp.fastPut(localPath, remotePath, {
+        concurrency: 25,
+        chunkSize: 128 * 1024,
+        step: (transferred: number, _chunk: number, _total: number) => {
+          progress.bytesTransferred = transferred;
+          const now = Date.now();
+          if (now - lastEmit >= 200) {
+            lastEmit = now;
+            const elapsed = (now - startTime) / 1000;
+            progress.speed = elapsed > 0 ? transferred / elapsed : 0;
+            sftpService.emitProgress(progress);
+          }
+        }
+      }, (err) => {
+        if (err) {
+          progress.status = 'failed';
+          progress.error = err.message;
+          sftpService.emitProgress(progress);
+        } else {
+          progress.status = 'completed';
+          progress.bytesTransferred = stats.size;
+          sftpService.emitProgress(progress);
+        }
       });
 
       return progress.transferId;
@@ -202,10 +261,52 @@ export function registerIpcHandlers(): void {
       if (!client) throw new Error('Session not connected');
 
       const win = getMainWindow();
-      const progress = await sftpService.download(client, remotePath, localPath);
+
+      const sftp = await sftpService.getSFTP(client);
+      const remoteStats = await new Promise<{ size: number }>((resolve, reject) => {
+        sftp.stat(remotePath, (err: any, stats: any) => {
+          if (err) reject(new Error(`Failed to stat remote file: ${err.message}`));
+          else resolve({ size: stats.size });
+        });
+      });
+
+      const progress = createTransferProgress(basename(remotePath), 'download', remoteStats.size);
+      sftpService.queue.addTransfer(progress);
 
       sftpService.onProgress(progress.transferId, (p) => {
         win?.webContents.send('sftp:progress', p);
+      });
+
+      progress.status = 'transferring';
+      sftpService.emitProgress(progress);
+
+      const startTime = Date.now();
+      let lastEmit = 0;
+
+      // Use fastGet for parallel transfer — don't await, return transferId immediately
+      sftp.fastGet(remotePath, localPath, {
+        concurrency: 25,
+        chunkSize: 128 * 1024,
+        step: (transferred: number, _chunk: number, _total: number) => {
+          progress.bytesTransferred = transferred;
+          const now = Date.now();
+          if (now - lastEmit >= 200) {
+            lastEmit = now;
+            const elapsed = (now - startTime) / 1000;
+            progress.speed = elapsed > 0 ? transferred / elapsed : 0;
+            sftpService.emitProgress(progress);
+          }
+        }
+      }, (err) => {
+        if (err) {
+          progress.status = 'failed';
+          progress.error = err.message;
+          sftpService.emitProgress(progress);
+        } else {
+          progress.status = 'completed';
+          progress.bytesTransferred = remoteStats.size;
+          sftpService.emitProgress(progress);
+        }
       });
 
       return progress.transferId;
@@ -216,6 +317,72 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('sftp:cancel', async (_event, transferId: string) => {
     sftpService.cancelTransfer(transferId);
+  });
+
+  ipcMain.handle('sftp:delete', async (_event, sessionId: string, remotePath: string) => {
+    try {
+      const client = sshService.getSFTPClient(sessionId);
+      if (!client) throw new Error('Session not connected');
+      await sftpService.deleteRemote(client, remotePath);
+    } catch (err) {
+      throw new Error(`SFTP delete failed: ${(err as Error).message}`);
+    }
+  });
+
+  ipcMain.handle('sftp:rename', async (_event, sessionId: string, oldPath: string, newPath: string) => {
+    try {
+      const client = sshService.getSFTPClient(sessionId);
+      if (!client) throw new Error('Session not connected');
+      await sftpService.renameRemote(client, oldPath, newPath);
+    } catch (err) {
+      throw new Error(`SFTP rename failed: ${(err as Error).message}`);
+    }
+  });
+
+  ipcMain.handle('sftp:mkdir', async (_event, sessionId: string, remotePath: string) => {
+    try {
+      const client = sshService.getSFTPClient(sessionId);
+      if (!client) throw new Error('Session not connected');
+      await sftpService.mkdirRemote(client, remotePath);
+    } catch (err) {
+      throw new Error(`SFTP mkdir failed: ${(err as Error).message}`);
+    }
+  });
+
+  ipcMain.handle('sftp:chmod', async (_event, sessionId: string, remotePath: string, mode: number) => {
+    try {
+      const client = sshService.getSFTPClient(sessionId);
+      if (!client) throw new Error('Session not connected');
+      await sftpService.chmodRemote(client, remotePath, mode);
+    } catch (err) {
+      throw new Error(`SFTP chmod failed: ${(err as Error).message}`);
+    }
+  });
+
+  ipcMain.handle('sftp:readFile', async (_event, sessionId: string, remotePath: string) => {
+    try {
+      const client = sshService.getSFTPClient(sessionId);
+      if (!client) throw new Error('Session not connected');
+      return await sftpService.readRemoteFile(client, remotePath);
+    } catch (err) {
+      throw new Error(`SFTP read failed: ${(err as Error).message}`);
+    }
+  });
+
+  ipcMain.handle('sftp:writeFile', async (_event, sessionId: string, remotePath: string, content: string) => {
+    try {
+      const client = sshService.getSFTPClient(sessionId);
+      if (!client) throw new Error('Session not connected');
+      await sftpService.writeRemoteFile(client, remotePath, content);
+    } catch (err) {
+      throw new Error(`SFTP write failed: ${(err as Error).message}`);
+    }
+  });
+
+  // === Shell utility handlers ===
+  ipcMain.handle('shell:showItemInFolder', async (_event, fullPath: string) => {
+    const { shell } = require('electron');
+    shell.showItemInFolder(fullPath);
   });
 
   // === Dialog handlers ===
@@ -437,5 +604,262 @@ export function registerIpcHandlers(): void {
 
   ipcMain.on('serial:setRTS', (_event, sessionId: string, value: boolean) => {
     serialService.setRTS(sessionId, value);
+  });
+
+  // === CAN Debug handlers ===
+  ipcMain.handle('can:listDrivers', async () => {
+    return canService.listDrivers();
+  });
+
+  ipcMain.handle('can:getDeviceTypes', async (_event, driverName: string) => {
+    return canService.getDeviceTypes(driverName);
+  });
+
+  ipcMain.handle('can:open', async (_event, driverName: string, deviceType: number, deviceIndex: number, channel: number, baudRate: number, fdConfig?: { protocol?: number; mode?: number; dataBaudRate?: number; nonIso?: boolean; ch1BaudRate?: number; ch1DataBaudRate?: number }) => {
+    try {
+      const fdOpts = fdConfig ? {
+        deviceType,
+        deviceIndex,
+        channel,
+        protocol: fdConfig.protocol ?? 1,
+        mode: fdConfig.mode ?? 0,
+        baudRate,
+        dataBaudRate: fdConfig.dataBaudRate ?? 5000000,
+        ch1BaudRate: fdConfig.ch1BaudRate,
+        ch1DataBaudRate: fdConfig.ch1DataBaudRate,
+      } : undefined;
+      const result = canService.open(driverName, { deviceType, deviceIndex, channel, baudRate, ch1BaudRate: fdConfig?.ch1BaudRate }, fdOpts);
+      const win = getMainWindow();
+
+      // result may be a single session or array of sessions (GC-FD opens both channels)
+      const sessions = Array.isArray(result) ? result : [result];
+      for (const session of sessions) {
+        canService.onData(session.id, (frames) => {
+          win?.webContents.send('can:data', session.id, frames);
+        });
+        canService.onError(session.id, (error) => {
+          win?.webContents.send('can:error', session.id, error);
+        });
+      }
+
+      return result;
+    } catch (err) {
+      throw new Error(`CAN open failed: ${(err as Error).message}`);
+    }
+  });
+
+  ipcMain.handle('can:close', async (_event, sessionId: string) => {
+    canService.close(sessionId);
+  });
+
+  ipcMain.on('can:send', (_event, sessionId: string, frame: CanFrame) => {
+    canService.send(sessionId, [frame]);
+  });
+
+  ipcMain.handle('can:parseDbc', async (_event, content: string) => {
+    return canService.parseDbcContent(content);
+  });
+
+  // === CAN UDS handlers ===
+  ipcMain.handle('can:udsRequest', async (_event, sessionId: string, txId: number, rxId: number, payload: number[]) => {
+    try {
+      const win = getMainWindow();
+      const resp = await canService.udsRequest(sessionId, txId, rxId, payload, (entry) => {
+        win?.webContents.send('can:udsLog', sessionId, entry);
+      });
+      return resp;
+    } catch (err) {
+      throw new Error(`UDS request failed: ${(err as Error).message}`);
+    }
+  });
+
+  ipcMain.on('can:udsStartTesterPresent', (_event, sessionId: string, txId: number, rxId: number, intervalMs?: number) => {
+    canService.udsStartTesterPresent(sessionId, txId, rxId, intervalMs);
+  });
+
+  ipcMain.on('can:udsStopTesterPresent', (_event, sessionId: string, txId: number, rxId: number) => {
+    canService.udsStopTesterPresent(sessionId, txId, rxId);
+  });
+
+  ipcMain.on('can:udsDestroy', (_event, sessionId: string, txId: number, rxId: number) => {
+    canService.udsDestroy(sessionId, txId, rxId);
+  });
+
+  // === EtherCAT handlers ===
+  ipcMain.handle('ecat:isAvailable', async () => {
+    return ecatService.isAvailable();
+  });
+
+  ipcMain.handle('ecat:listAdapters', async () => {
+    return ecatService.listAdapters();
+  });
+
+  ipcMain.handle('ecat:connect', async (_event, adapterName: string) => {
+    try {
+      const session = ecatService.connect(adapterName);
+      const win = getMainWindow();
+
+      ecatService.onPdoData((slaveIndex, input, output) => {
+        win?.webContents.send('ecat:pdoData', slaveIndex, input, output);
+      });
+
+      ecatService.onWkcError((expected, actual) => {
+        win?.webContents.send('ecat:wkcError', expected, actual);
+      });
+
+      ecatService.onStateChange((s: EcSession) => {
+        win?.webContents.send('ecat:stateChange', s);
+      });
+
+      ecatService.onEmergency((msg) => {
+        win?.webContents.send('ecat:emergency', msg);
+      });
+
+      return session;
+    } catch (err) {
+      throw new Error(`EtherCAT connect failed: ${(err as Error).message}`);
+    }
+  });
+
+  ipcMain.handle('ecat:disconnect', async () => {
+    ecatService.disconnect();
+  });
+
+  ipcMain.handle('ecat:getSlaves', async () => {
+    return ecatService.getSlaves();
+  });
+
+  ipcMain.handle('ecat:requestState', async (_event, slaveIndex: number, targetState: number) => {
+    try {
+      return ecatService.requestState(slaveIndex, targetState);
+    } catch (err) {
+      throw new Error(`EtherCAT state change failed: ${(err as Error).message}`);
+    }
+  });
+
+  ipcMain.handle('ecat:sdoRead', async (_event, slaveIndex: number, index: number, subIndex: number, size: number) => {
+    try {
+      return ecatService.sdoRead(slaveIndex, index, subIndex, size);
+    } catch (err) {
+      throw new Error(`SDO read failed: ${(err as Error).message}`);
+    }
+  });
+
+  ipcMain.handle('ecat:sdoWrite', async (_event, slaveIndex: number, index: number, subIndex: number, dataHex: string, dataType: string) => {
+    try {
+      return ecatService.sdoWrite(slaveIndex, index, subIndex, dataHex, dataType);
+    } catch (err) {
+      throw new Error(`SDO write failed: ${(err as Error).message}`);
+    }
+  });
+
+  ipcMain.handle('ecat:startPdo', async (_event, intervalMs?: number) => {
+    ecatService.startPdoMonitor(intervalMs ?? 1);
+  });
+
+  ipcMain.handle('ecat:stopPdo', async () => {
+    ecatService.stopPdoMonitor();
+  });
+
+  ipcMain.handle('ecat:importEsi', async (_event, xmlContent: string) => {
+    try {
+      return ecatService.importEsi(xmlContent);
+    } catch (err) {
+      throw new Error(`ESI import failed: ${(err as Error).message}`);
+    }
+  });
+
+  ipcMain.handle('ecat:scanOd', async (_event, slaveIndex: number) => {
+    try {
+      return ecatService.scanObjectDictionary(slaveIndex);
+    } catch (err) {
+      throw new Error(`OD scan failed: ${(err as Error).message}`);
+    }
+  });
+
+  ipcMain.handle('ecat:getErrorCounters', async (_event, slaveIndex: number) => {
+    try {
+      return ecatService.getErrorCounters(slaveIndex);
+    } catch (err) {
+      throw new Error(`Error counters read failed: ${(err as Error).message}`);
+    }
+  });
+
+  ipcMain.handle('ecat:clearErrorCounters', async (_event, slaveIndex: number) => {
+    try {
+      ecatService.clearErrorCounters(slaveIndex);
+    } catch (err) {
+      throw new Error(`Error counters clear failed: ${(err as Error).message}`);
+    }
+  });
+
+  ipcMain.handle('ecat:resolvePdoSignals', async (_event, slaveIndex: number) => {
+    try {
+      return ecatService.resolvePdoSignals(slaveIndex);
+    } catch (err) {
+      throw new Error(`PDO signal resolve failed: ${(err as Error).message}`);
+    }
+  });
+
+  ipcMain.handle('ecat:writeOutputPdo', async (_event, slaveIndex: number, offset: number, data: number[]) => {
+    try {
+      ecatService.writeOutputPdo(slaveIndex, offset, data);
+    } catch (err) {
+      throw new Error(`PDO write failed: ${(err as Error).message}`);
+    }
+  });
+
+  ipcMain.handle('ecat:foeUpload', async (_event, slaveIndex: number, filename: string, dataArr: number[], password: number) => {
+    try {
+      const win = getMainWindow();
+      const data = Buffer.from(dataArr);
+      const result = await ecatService.foeUpload(slaveIndex, filename, data, password, (percent) => {
+        win?.webContents.send('ecat:foeProgress', percent);
+      });
+      return result;
+    } catch (err) {
+      throw new Error(`FoE upload failed: ${(err as Error).message}`);
+    }
+  });
+
+  ipcMain.handle('ecat:siiRead', async (_event, slaveIndex: number, offset: number, size: number) => {
+    try {
+      return ecatService.siiRead(slaveIndex, offset, size);
+    } catch (err) {
+      throw new Error(`SII read failed: ${(err as Error).message}`);
+    }
+  });
+
+  ipcMain.handle('ecat:siiWrite', async (_event, slaveIndex: number, offset: number, data: number[]) => {
+    try {
+      return ecatService.siiWrite(slaveIndex, offset, data);
+    } catch (err) {
+      throw new Error(`SII write failed: ${(err as Error).message}`);
+    }
+  });
+
+  // === License handlers ===
+  ipcMain.handle('license:getStatus', async () => {
+    return licenseService.getLicenseStatus();
+  });
+
+  ipcMain.handle('license:getMachineId', async () => {
+    return licenseService.getMachineId();
+  });
+
+  ipcMain.handle('license:activate', async (_event, licenseKey: string) => {
+    return licenseService.activateLicense(licenseKey);
+  });
+
+  ipcMain.handle('license:verify', async () => {
+    return licenseService.verifyLicenseOnline();
+  });
+
+  ipcMain.handle('license:createPayment', async (_event, payType: 'wxpay' | 'alipay') => {
+    return licenseService.createPayment(payType);
+  });
+
+  ipcMain.handle('license:queryPayment', async (_event, orderId: string) => {
+    return licenseService.queryPayment(orderId);
   });
 }

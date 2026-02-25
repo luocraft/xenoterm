@@ -1,5 +1,6 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useAppStore } from '../store/app-store';
+import { useT } from '../i18n';
 import type { TransferProgress } from '../../shared/types';
 
 function formatSpeed(bytesPerSec: number): string {
@@ -44,17 +45,26 @@ const statusColor = (status: string) => {
 };
 
 export default function TransferQueue() {
+  const t = useT();
   const transfers = useAppStore((s) => s.transfers);
   const updateTransfer = useAppStore((s) => s.updateTransfer);
   const removeTransfer = useAppStore((s) => s.removeTransfer);
 
-  // Listen for progress updates from main process
+  // Progress updates are handled at App level — no need to listen here
+
+  // Auto-remove completed/cancelled transfers after 1 second
+  const dismissTimers = useRef<Set<string>>(new Set());
   useEffect(() => {
-    const unsub = window.api.sftp.onProgress((progress) => {
-      updateTransfer(progress.transferId, progress);
-    });
-    return unsub;
-  }, [updateTransfer]);
+    for (const t of transfers) {
+      if ((t.status === 'completed' || t.status === 'cancelled') && !dismissTimers.current.has(t.transferId)) {
+        dismissTimers.current.add(t.transferId);
+        setTimeout(() => {
+          removeTransfer(t.transferId);
+          dismissTimers.current.delete(t.transferId);
+        }, 1000);
+      }
+    }
+  }, [transfers, removeTransfer]);
 
   const handleCancel = async (transferId: string) => {
     await window.api.sftp.cancelTransfer(transferId);
@@ -67,7 +77,7 @@ export default function TransferQueue() {
   if (transfers.length === 0) {
     return (
       <div className="p-4 text-center text-xs" style={{ color: 'var(--color-text-dim)' }}>
-        No transfers
+        {t('transfer.noTransfers')}
       </div>
     );
   }
@@ -76,7 +86,7 @@ export default function TransferQueue() {
     <div className="h-full overflow-y-auto">
       {activeTransfers.length > 0 && (
         <div className="px-2 py-1 text-[10px] uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>
-          Active ({activeTransfers.length})
+          {t('transfer.active')} ({activeTransfers.length})
         </div>
       )}
       {activeTransfers.map((t) => (
@@ -85,7 +95,7 @@ export default function TransferQueue() {
 
       {completedTransfers.length > 0 && (
         <div className="px-2 py-1 text-[10px] uppercase tracking-wider mt-1" style={{ color: 'var(--color-text-muted)' }}>
-          History ({completedTransfers.length})
+          {t('transfer.history')} ({completedTransfers.length})
         </div>
       )}
       {completedTransfers.map((t) => (
@@ -137,20 +147,27 @@ function TransferItem({
         )}
       </div>
 
-      {isActive && (
+      {(isActive || transfer.status === 'completed') && (
         <>
           {/* Progress bar */}
           <div className="mt-1.5 h-1 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--color-input-bg)' }}>
             <div
-              className="h-full bg-[var(--color-accent)] rounded-full transition-all duration-300"
+              className={`h-full rounded-full transition-all duration-300 ${
+                transfer.status === 'completed' ? 'bg-green-500' : 'bg-[var(--color-accent)]'
+              }`}
               style={{ width: `${pct}%` }}
             />
           </div>
-          <div className="flex justify-between mt-1 text-[10px]" style={{ color: 'var(--color-text-muted)' }}>
-            <span>{pct}%</span>
-            <span>{formatSpeed(transfer.speed)}</span>
-            <span>ETA {formatETA(transfer)}</span>
-          </div>
+          {isActive && (
+            <div className="flex justify-between mt-1 text-[10px]" style={{ color: 'var(--color-text-muted)' }}>
+              <span>{pct}%</span>
+              <span>{formatSpeed(transfer.speed)}</span>
+              <span>ETA {formatETA(transfer)}</span>
+            </div>
+          )}
+          {transfer.status === 'completed' && (
+            <div className="mt-1 text-[10px] text-green-400">100%</div>
+          )}
         </>
       )}
 

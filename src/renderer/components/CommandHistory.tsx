@@ -1,11 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import { useAppStore } from '../store/app-store';
+import { useT } from '../i18n';
 
 interface CommandHistoryProps {
   onClose: () => void;
 }
 
 export default function CommandHistory({ onClose }: CommandHistoryProps) {
+  const t = useT();
   const activeSessionId = useAppStore((s) => s.activeSessionId);
   const commandHistory = useAppStore((s) => s.commandHistory);
 
@@ -52,7 +54,7 @@ export default function CommandHistory({ onClose }: CommandHistoryProps) {
     <div className="h-full flex flex-col" style={{ backgroundColor: 'var(--color-surface)' }}>
       {/* Header */}
       <div className="px-3 py-2 flex items-center justify-between flex-shrink-0" style={{ borderBottom: '1px solid var(--color-border)' }}>
-        <span className="text-xs font-medium" style={{ color: 'var(--color-text-primary)' }}>Command History</span>
+        <span className="text-xs font-medium" style={{ color: 'var(--color-text-primary)' }}>{t('cmdHistory.title')}</span>
         <button onClick={onClose} className="text-sm" style={{ color: 'var(--color-text-muted)' }}>×</button>
       </div>
 
@@ -62,7 +64,7 @@ export default function CommandHistory({ onClose }: CommandHistoryProps) {
           type="text"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          placeholder="Search commands..."
+          placeholder={t('cmdHistory.search')}
           className="flex-1 px-2 py-1 text-xs rounded outline-none focus:border-[var(--color-accent)] transition-colors"
           style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text-primary)' }}
         />
@@ -73,7 +75,7 @@ export default function CommandHistory({ onClose }: CommandHistoryProps) {
             className="px-1.5 py-1 text-xs rounded outline-none"
             style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text-primary)' }}
           >
-            <option value="all">All hosts</option>
+            <option value="all">{t('cmdHistory.allHosts')}</option>
             {hostNames.map((name) => (
               <option key={name} value={name}>{name}</option>
             ))}
@@ -85,7 +87,7 @@ export default function CommandHistory({ onClose }: CommandHistoryProps) {
       <div className="flex-1 overflow-y-auto">
         {commands.length === 0 ? (
           <div className="flex items-center justify-center h-20 text-xs" style={{ color: 'var(--color-text-dim)' }}>
-            {commandHistory.length === 0 ? 'No commands yet' : 'No matching commands'}
+            {commandHistory.length === 0 ? t('cmdHistory.empty') : t('cmdHistory.noMatch')}
           </div>
         ) : (
           commands.map((entry, i) => (
@@ -96,7 +98,7 @@ export default function CommandHistory({ onClose }: CommandHistoryProps) {
               style={{ borderBottom: '1px solid var(--color-border)' }}
               onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--color-hover-bg)'; }}
               onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = ''; }}
-              title="Click to send to active terminal"
+              title={t('cmdHistory.clickHint')}
             >
               <span className="text-[10px] opacity-50" style={{ color: 'var(--color-text-dim)' }}>$</span>
               <span className="text-xs font-mono truncate flex-1" style={{ color: 'var(--color-text-primary)' }}>{entry.cmd}</span>

@@ -1,0 +1,16 @@
+{
+  "name": "xenoterm-license-server",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "better-sqlite3": "^11.7.0",
+    "uuid": "^10.0.0",
+    "md5": "^2.3.0",
+    "cors": "^2.8.5"
+  }
+}

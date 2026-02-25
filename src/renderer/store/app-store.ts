@@ -40,6 +40,7 @@ export interface AppStore {
   // Actions — Session
   connectToHost: (id: string, password?: string) => Promise<void>;
   disconnectSession: (sessionId: string) => Promise<void>;
+  reconnectSession: (sessionId: string, password?: string) => Promise<void>;
   setActiveSession: (sessionId: string) => void;
   removeSession: (sessionId: string) => void;
   updateSessionStatus: (sessionId: string, status: SSHSession['status'], error?: string) => void;
@@ -169,6 +170,26 @@ export const useAppStore = create<AppStore>((set, get) => ({
     }
   },
 
+  reconnectSession: async (sessionId, password) => {
+    const state = get();
+    const oldSession = state.sessions.find((s) => s.id === sessionId);
+    if (!oldSession) throw new Error('Session not found');
+
+    // Mark as connecting
+    get().updateSessionStatus(sessionId, 'connecting');
+
+    try {
+      // Backend reconnect: reuses same sessionId, creates new Client + shell
+      await window.api.ssh.reconnect(sessionId, password);
+
+      // Update session status — terminal is still alive, data flows through existing callbacks
+      get().updateSessionStatus(sessionId, 'connected');
+    } catch (err) {
+      get().updateSessionStatus(sessionId, 'error', err instanceof Error ? err.message : String(err));
+      throw err;
+    }
+  },
+
   setActiveSession: (sessionId) => set({ activeSessionId: sessionId }),
 
   removeSession: (sessionId) =>
@@ -192,14 +213,37 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   // Transfer actions
   addTransfer: (transfer) =>
-    set((state) => ({ transfers: [...state.transfers, transfer] })),
+    set((state) => {
+      // Skip if already exists (may have been auto-created by upsert from progress event)
+      if (state.transfers.some((t) => t.transferId === transfer.transferId)) {
+        return state;
+      }
+      return { transfers: [...state.transfers, transfer] };
+    }),
 
   updateTransfer: (transferId, updates) =>
-    set((state) => ({
-      transfers: state.transfers.map((t) =>
-        t.transferId === transferId ? { ...t, ...updates } : t
-      )
-    })),
+    set((state) => {
+      const exists = state.transfers.some((t) => t.transferId === transferId);
+      if (exists) {
+        return {
+          transfers: state.transfers.map((t) =>
+            t.transferId === transferId ? { ...t, ...updates } : t
+          )
+        };
+      }
+      // Auto-create if progress arrives before addTransfer (race with fastPut/fastGet)
+      const newTransfer: TransferProgress = {
+        transferId,
+        filename: (updates as any).filename || 'unknown',
+        direction: (updates as any).direction || 'download',
+        bytesTransferred: (updates as any).bytesTransferred || 0,
+        totalBytes: (updates as any).totalBytes || 0,
+        speed: (updates as any).speed || 0,
+        status: (updates as any).status || 'transferring',
+        ...updates
+      };
+      return { transfers: [...state.transfers, newTransfer] };
+    }),
 
   removeTransfer: (transferId) =>
     set((state) => ({
@@ -213,7 +257,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     window.api.config.setAppConfig({ theme: newTheme });
     document.documentElement.classList.toggle('light', newTheme === 'light');
     if (newTheme === 'light') {
-      window.api.theme.updateTitlebar('#c2c8c5', '#4c566a');
+      window.api.theme.updateTitlebar('#c9cfcb', '#4a524d');
     } else {
       window.api.theme.updateTitlebar('#141525', '#9ca3af');
     }
@@ -268,7 +312,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       });
       document.documentElement.classList.toggle('light', config.theme === 'light');
       if (config.theme === 'light') {
-        window.api.theme.updateTitlebar('#c2c8c5', '#4c566a');
+        window.api.theme.updateTitlebar('#c9cfcb', '#4a524d');
       } else {
         window.api.theme.updateTitlebar('#141525', '#9ca3af');
       }

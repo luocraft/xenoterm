@@ -220,3 +220,27 @@ export function replaceSession(
     second: replaceSession(tree.second, paneId, newSessionId),
   };
 }
+
+/**
+ * Replaces all occurrences of oldSessionId with newSessionId in the tree,
+ * also updating paneId to maintain the stable `pane-{sessionId}` convention.
+ * Returns a new tree (pure — never mutates the input).
+ */
+export function replaceSessionId(
+  tree: LayoutNode,
+  oldSessionId: string,
+  newSessionId: string
+): LayoutNode {
+  if (tree.type === 'leaf') {
+    if (tree.sessionId === oldSessionId) {
+      return { ...tree, sessionId: newSessionId, paneId: `pane-${newSessionId}` };
+    }
+    return tree;
+  }
+
+  return {
+    ...tree,
+    first: replaceSessionId(tree.first, oldSessionId, newSessionId),
+    second: replaceSessionId(tree.second, oldSessionId, newSessionId),
+  };
+}

@@ -6,35 +6,37 @@
 <title>XenoTerm 帮助文档</title>
 <style>
   :root {
-    --bg: #0f1117;
-    --surface: #161822;
-    --sidebar: #1a1d2e;
-    --border: #2a2d3e;
-    --accent: #6366f1;
-    --accent-light: #818cf8;
-    --text: #e2e8f0;
-    --text-sec: #94a3b8;
-    --text-dim: #64748b;
-    --green: #4ade80;
-    --blue: #60a5fa;
-    --yellow: #facc15;
-    --red: #f87171;
-    --code-bg: #1e2030;
+    --bg: #ffffff;
+    --surface: #f8f9fa;
+    --sidebar: #fafbfc;
+    --border: #e5e7eb;
+    --accent: #4f46e5;
+    --accent-light: #6366f1;
+    --accent-bg: #eef2ff;
+    --text: #1f2937;
+    --text-sec: #4b5563;
+    --text-dim: #9ca3af;
+    --green: #059669;
+    --blue: #2563eb;
+    --yellow: #d97706;
+    --red: #dc2626;
+    --orange: #ea580c;
+    --code-bg: #f3f4f6;
+    --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
     background: var(--bg);
     color: var(--text);
-    line-height: 1.7;
+    line-height: 1.75;
     display: flex;
     min-height: 100vh;
   }
-  /* Sidebar nav */
   nav {
     position: fixed;
     top: 0; left: 0;
-    width: 240px;
+    width: 250px;
     height: 100vh;
     background: var(--sidebar);
     border-right: 1px solid var(--border);
@@ -43,98 +45,101 @@
   }
   nav .logo {
     padding: 0 20px 20px;
-    font-size: 18px;
+    font-size: 17px;
     font-weight: 700;
-    color: var(--accent-light);
+    color: var(--accent);
     border-bottom: 1px solid var(--border);
     margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
-  nav .logo span { opacity: 0.5; font-weight: 400; font-size: 12px; margin-left: 6px; }
+  nav .logo span { color: var(--text-dim); font-weight: 400; font-size: 12px; }
   nav a {
     display: block;
-    padding: 6px 20px;
+    padding: 5px 20px;
     color: var(--text-sec);
     text-decoration: none;
     font-size: 13px;
     transition: all 0.15s;
+    border-left: 2px solid transparent;
   }
-  nav a:hover { color: var(--text); background: rgba(99,102,241,0.08); }
-  nav a.active { color: var(--accent-light); border-right: 2px solid var(--accent); }
+  nav a:hover { color: var(--accent); background: var(--accent-bg); }
+  nav a.active { color: var(--accent); border-left-color: var(--accent); background: var(--accent-bg); }
   nav .section-title {
-    padding: 16px 20px 4px;
+    padding: 14px 20px 4px;
     font-size: 10px;
     text-transform: uppercase;
-    letter-spacing: 1px;
+    letter-spacing: 1.2px;
     color: var(--text-dim);
+    font-weight: 600;
   }
-  /* Main content */
   main {
-    margin-left: 240px;
+    margin-left: 250px;
     flex: 1;
-    max-width: 820px;
+    max-width: 840px;
     padding: 40px 48px 80px;
   }
-  h1 {
-    font-size: 28px;
-    font-weight: 700;
-    margin-bottom: 8px;
-    color: var(--text);
-  }
+  h1 { font-size: 26px; font-weight: 700; margin-bottom: 6px; color: var(--text); }
   h1 + p { color: var(--text-dim); margin-bottom: 32px; font-size: 14px; }
   h2 {
-    font-size: 20px;
-    font-weight: 600;
-    margin: 40px 0 16px;
-    padding-top: 20px;
-    border-top: 1px solid var(--border);
-    color: var(--text);
+    font-size: 19px; font-weight: 600; margin: 36px 0 14px;
+    padding-top: 20px; border-top: 1px solid var(--border); color: var(--text);
   }
   h2:first-of-type { border-top: none; margin-top: 0; padding-top: 0; }
-  h3 {
-    font-size: 15px;
-    font-weight: 600;
-    margin: 24px 0 8px;
-    color: var(--text-sec);
-  }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; color: var(--text-sec); }
   p { margin-bottom: 12px; font-size: 14px; color: var(--text-sec); }
   ul, ol { margin: 0 0 16px 20px; font-size: 14px; color: var(--text-sec); }
-  li { margin-bottom: 6px; }
+  li { margin-bottom: 5px; }
   code {
-    background: var(--code-bg);
-    padding: 2px 6px;
-    border-radius: 4px;
+    background: var(--code-bg); padding: 2px 6px; border-radius: 4px;
     font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
-    font-size: 12.5px;
-    color: var(--accent-light);
+    font-size: 12.5px; color: var(--accent);
   }
   pre {
-    background: var(--code-bg);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 16px;
-    margin: 12px 0 20px;
-    overflow-x: auto;
-    font-size: 12.5px;
-    line-height: 1.6;
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px 16px; margin: 10px 0 18px; overflow-x: auto; font-size: 12.5px; line-height: 1.6;
   }
   pre code { background: none; padding: 0; color: var(--text-sec); }
   .badge {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 11px;
-    font-weight: 600;
-    margin-right: 4px;
+    display: inline-block; padding: 2px 8px; border-radius: 4px;
+    font-size: 11px; font-weight: 600; margin-right: 4px;
   }
-  .badge-tcp { background: rgba(96,165,250,0.15); color: var(--blue); }
-  .badge-udp { background: rgba(250,204,21,0.15); color: var(--yellow); }
-  .badge-server { background: rgba(74,222,128,0.15); color: var(--green); }
+  .badge-tcp { background: #dbeafe; color: var(--blue); }
+  .badge-udp { background: #fef3c7; color: var(--yellow); }
+  .badge-server { background: #d1fae5; color: var(--green); }
+  .badge-can { background: #fee2e2; color: var(--red); }
+  .badge-ecat { background: #d1fae5; color: var(--green); }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0 18px; font-size: 13px; }
+  thead tr { border-bottom: 2px solid var(--border); }
+  th { text-align: left; padding: 8px 10px; color: var(--text-dim); font-weight: 600; font-size: 12px; }
+  td { padding: 8px 10px; color: var(--text-sec); border-bottom: 1px solid var(--border); }
+  tbody tr:last-child td { border-bottom: none; }
+  .feature-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px; margin: 16px 0 24px;
+  }
+  .feature-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px; transition: box-shadow 0.2s;
+  }
+  .feature-card:hover { box-shadow: var(--shadow); }
+  .feature-card .icon { font-size: 22px; margin-bottom: 8px; }
+  .feature-card .title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+  .feature-card .desc { font-size: 12px; color: var(--text-dim); line-height: 1.5; }
+  .tip {
+    background: var(--accent-bg); border-left: 3px solid var(--accent);
+    padding: 10px 14px; border-radius: 0 6px 6px 0; margin: 12px 0 18px;
+    font-size: 13px; color: var(--text-sec);
+  }
+  .footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border); text-align: center; }
+  .footer p { color: var(--text-dim); font-size: 12px; }
 </style>
 </head>
 <body>
 
 <nav>
-  <div class="logo">⌨ XenoTerm <span>v1.0</span></div>
+  <div class="logo">⌨ XenoTerm <span>v1.3.0</span></div>
 
   <div class="section-title">快速开始</div>
   <a href="#overview">概述</a>
@@ -146,6 +151,7 @@
   <a href="#ssh-terminal">终端操作</a>
   <a href="#ssh-workspace">工作区与分屏</a>
   <a href="#ssh-sftp">文件传输 (SFTP)</a>
+  <a href="#ssh-sftp-ctx">文件右键操作</a>
   <a href="#ssh-jumphost">跳板机</a>
   <a href="#ssh-import-export">导入 / 导出</a>
 
@@ -155,15 +161,39 @@
   <a href="#net-tcp-server">TCP Server</a>
   <a href="#net-udp">UDP</a>
   <a href="#net-encoding">编码与显示</a>
+  <a href="#net-template">发送模板</a>
 
   <div class="section-title">串口调试助手</div>
   <a href="#serial-overview">功能概述</a>
   <a href="#serial-config">串口配置</a>
   <a href="#serial-signals">控制信号</a>
+  <a href="#serial-modbus">Modbus RTU</a>
+  <a href="#serial-template">发送模板</a>
+
+  <div class="section-title">CAN 总线调试</div>
+  <a href="#can-overview">功能概述</a>
+  <a href="#can-connect">连接与配置</a>
+  <a href="#can-fd">CAN FD 支持</a>
+  <a href="#can-dbc">DBC 文件解析</a>
+  <a href="#can-j1939">J1939 协议</a>
+  <a href="#can-monitor">报文监控</a>
+  <a href="#can-signal">信号监控与图表</a>
+  <a href="#can-send">报文发送</a>
+  <a href="#can-uds">UDS 诊断</a>
+  <a href="#can-export">数据导出</a>
+
+  <div class="section-title">EtherCAT 主站</div>
+  <a href="#ecat-overview">功能概述</a>
+  <a href="#ecat-connect">连接与扫描</a>
+  <a href="#ecat-sdo">SDO 读写</a>
+  <a href="#ecat-pdo">PDO 映射</a>
+  <a href="#ecat-foe">FoE 固件升级</a>
+  <a href="#ecat-sii">SII 读写</a>
 
   <div class="section-title">其他</div>
   <a href="#shortcuts">快捷操作</a>
   <a href="#theme">主题切换</a>
+  <a href="#license">许可证</a>
   <a href="#faq">常见问题</a>
 </nav>
 
@@ -172,23 +202,39 @@
 <!-- ==================== 快速开始 ==================== -->
 
 <h1 id="overview">XenoTerm 帮助文档</h1>
-<p>XenoTerm 是一款集 SSH 终端管理与网络调试于一体的桌面工具，基于 Electron 构建。</p>
+<p>XenoTerm — 通用调试工作站，集 SSH 终端、网络调试、串口调试、CAN 总线分析、EtherCAT 主站于一体。</p>
 
 <h2>功能一览</h2>
-<ul>
-  <li>SSH 远程连接管理，支持密码和公钥认证</li>
-  <li>多标签页 + 工作区分屏，支持拖拽排列</li>
-  <li>SFTP 文件浏览与上传下载</li>
-  <li>跳板机 (Jump Host) 支持</li>
-  <li>连接配置导入 / 导出</li>
-  <li>命令历史记录</li>
-  <li>网络调试助手：TCP Client / TCP Server / UDP 数据收发</li>
-  <li>串口调试助手：串口通信、DTR/RTS 控制信号</li>
-  <li>深色 / 浅色主题切换</li>
-</ul>
+<div class="feature-grid">
+  <div class="feature-card">
+    <div class="icon">🖥</div>
+    <div class="title">SSH 终端</div>
+    <div class="desc">多标签 · 分屏 · SFTP 文件传输 · 跳板机 · 命令历史 · 断线重连</div>
+  </div>
+  <div class="feature-card">
+    <div class="icon">🔌</div>
+    <div class="title">网络调试</div>
+    <div class="desc">TCP Client / Server · UDP · HEX / UTF-8 · 发送模板 · 定时发送</div>
+  </div>
+  <div class="feature-card">
+    <div class="icon">⚡</div>
+    <div class="title">串口调试</div>
+    <div class="desc">串口通信 · DTR/RTS · Modbus RTU · 寄存器监控 · 发送模板</div>
+  </div>
+  <div class="feature-card">
+    <div class="icon">🚗</div>
+    <div class="title">CAN 总线</div>
+    <div class="desc">CAN / CAN FD · DBC 解析 · J1939 · 信号图表 · UDS 诊断 · BLF 导出</div>
+  </div>
+  <div class="feature-card">
+    <div class="icon">⚙️</div>
+    <div class="title">EtherCAT 主站</div>
+    <div class="desc">从站扫描 · SDO/PDO · OD 浏览 · FoE 固件升级 · SII 读写</div>
+  </div>
+</div>
 
 <h2 id="install">安装与启动</h2>
-<p>双击 <code>XenoTerm Setup 1.0.0.exe</code> 安装程序，按照向导完成安装后即可从桌面或开始菜单启动。</p>
+<p>双击 <code>XenoTerm Setup x.x.x.exe</code> 安装程序，按照向导完成安装后即可从桌面或开始菜单启动。</p>
 <p>也可以直接运行 <code>release/win-unpacked/XenoTerm.exe</code> 免安装使用。</p>
 
 <!-- ==================== SSH 客户端 ==================== -->
@@ -196,305 +242,529 @@
 <h2 id="ssh-connect">连接管理</h2>
 <h3>新建连接</h3>
 <ol>
-  <li>点击左侧边栏的 <code>+ New</code> 按钮</li>
+  <li>点击左侧边栏的 <code>+ 新建连接</code> 按钮</li>
   <li>填写连接名称、主机地址、端口（默认 22）、用户名</li>
   <li>选择认证方式（密码或公钥）</li>
-  <li>点击保存</li>
+  <li>点击创建保存</li>
 </ol>
 
 <h3>连接到服务器</h3>
 <ul>
   <li>双击左侧连接列表中的条目</li>
-  <li>或右键点击 → 选择 <code>Connect</code></li>
-  <li>如果使用密码认证，会弹出密码输入框</li>
+  <li>或右键点击 → 选择 <code>连接</code></li>
+  <li>如果使用密码认证且未保存密码，会弹出密码输入框</li>
 </ul>
 
 <h3>编辑 / 删除连接</h3>
-<p>右键点击连接条目，选择 <code>Edit</code> 编辑或 <code>Delete</code> 删除。</p>
+<p>右键点击连接条目，选择 <code>编辑</code> 或 <code>删除</code>。</p>
+
+<h3>断线重连</h3>
+<p>SSH 连接断开后，点击终端标签页上的重连按钮即可恢复会话。支持保存密码，重连时无需重新输入。</p>
 
 <h2 id="ssh-auth">认证方式</h2>
 <h3>密码认证</h3>
-<p>选择 <code>Password</code> 认证方式。连接时会弹出密码输入框，密码不会被保存到配置文件中。</p>
+<p>选择 <code>密码</code> 认证方式。可以在连接配置中预填密码，也可以留空在连接时输入。</p>
 
 <h3>公钥认证</h3>
-<p>选择 <code>Public Key</code> 认证方式，并指定私钥文件路径（如 <code>~/.ssh/id_rsa</code>）。如果私钥有密码保护，可以填写 Passphrase。</p>
+<p>选择 <code>公钥</code> 认证方式，并指定私钥文件路径（如 <code>~/.ssh/id_rsa</code>）。如果私钥有密码保护，可以填写密钥密码 (Passphrase)。</p>
 
 <h2 id="ssh-terminal">终端操作</h2>
 <p>连接成功后会自动打开一个终端标签页，支持完整的 xterm-256color 终端模拟。</p>
 <ul>
-  <li>终端支持鼠标选择、复制粘贴</li>
-  <li>输入的命令会自动记录到命令历史中</li>
-  <li>点击标签页上的 <code>✕</code> 按钮关闭终端并断开连接</li>
+  <li>选中文本自动复制到剪贴板</li>
+  <li>右键点击终端区域自动粘贴</li>
+  <li><code>Ctrl+Shift+C</code> 复制，<code>Ctrl+Shift+V</code> 粘贴</li>
+  <li>终端字体、字号、配色方案可在终端设置中自定义</li>
+  <li>点击标签页上的 <code>✕</code> 关闭终端并断开连接</li>
 </ul>
 
 <h2 id="ssh-workspace">工作区与分屏</h2>
-<p>XenoTerm 支持将多个终端会话组合到一个工作区中，实现分屏显示。</p>
-
-<h3>创建工作区</h3>
-<p>将一个标签页拖拽到另一个标签页上，会自动创建工作区并分屏显示。</p>
-
-<h3>分屏方向</h3>
-<p>拖拽时，根据鼠标放置的位置决定分屏方向：</p>
+<p>支持将多个终端会话组合到一个工作区中，实现分屏显示。</p>
+<h3>创建分屏</h3>
+<p>将一个标签页拖拽到另一个标签页上，根据鼠标放置位置决定分屏方向：</p>
 <ul>
-  <li>拖到左侧 → 左右水平分屏（新窗格在左）</li>
-  <li>拖到右侧 → 左右水平分屏（新窗格在右）</li>
-  <li>拖到上方 → 上下垂直分屏（新窗格在上）</li>
-  <li>拖到下方 → 上下垂直分屏（新窗格在下）</li>
+  <li>拖到左侧 / 右侧 → 左右水平分屏</li>
+  <li>拖到上方 / 下方 → 上下垂直分屏</li>
   <li>拖到中央 → 替换当前窗格的会话</li>
 </ul>
-
 <h3>调整分屏比例</h3>
 <p>拖动分屏之间的分隔线即可调整比例，范围限制在 20%~80% 之间。</p>
 
-<h3>从工作区移除</h3>
-<p>在工作区内关闭某个终端的标签页，该窗格会被移除，布局自动调整。当工作区只剩一个会话时，工作区自动解散。</p>
-
 <h2 id="ssh-sftp">文件传输 (SFTP)</h2>
-<p>连接到服务器后，可以通过文件管理器进行远程文件浏览和传输。</p>
+<p>连接到服务器后，点击标签栏上的文件浏览器按钮打开 SFTP 面板。左侧为本地文件，右侧为远端文件。</p>
+
+<h3>上传与下载</h3>
 <ul>
-  <li>支持远程目录浏览</li>
-  <li>支持文件上传和下载</li>
-  <li>传输进度实时显示在底部传输队列中</li>
+  <li>从本地面板拖拽文件到远端面板即可上传</li>
+  <li>从远端面板拖拽文件到本地面板即可下载</li>
+  <li>支持从操作系统桌面或文件夹直接拖拽文件到远端面板上传</li>
+  <li>传输使用并发分块加速（25 路并发，128KB 分块），大文件传输速度快</li>
+</ul>
+
+<h3>传输进度</h3>
+<ul>
+  <li>传输进度实时显示在右下角浮窗中，包含文件名、进度条、传输速度</li>
+  <li>传输完成后自动刷新对应目录的文件列表</li>
+  <li>完成的传输记录 1 秒后自动消失</li>
   <li>支持取消正在进行的传输</li>
 </ul>
 
+<h3>路径导航</h3>
+<ul>
+  <li>点击路径栏可以直接编辑路径，按回车跳转</li>
+  <li>远端路径输入时，以 <code>/</code> 结尾会自动预览目标目录内容</li>
+  <li>点击 <code>↑</code> 按钮返回上级目录</li>
+  <li>点击列头（名称/大小/修改时间）可以排序文件列表</li>
+</ul>
+
+<h2 id="ssh-sftp-ctx">文件右键操作</h2>
+<h3>远端文件右键菜单</h3>
+<ul>
+  <li><code>重命名</code> — 弹出对话框修改文件或文件夹名称</li>
+  <li><code>修改权限</code> — 输入八进制权限值（如 755、644）修改文件权限</li>
+  <li><code>删除</code> — 删除文件或文件夹（文件夹会递归删除）</li>
+</ul>
+<p>右键点击远端面板空白区域：</p>
+<ul>
+  <li><code>新建文件夹</code> — 在当前目录创建新文件夹</li>
+  <li><code>刷新</code> — 刷新当前目录文件列表</li>
+</ul>
+
+<h3>本地文件右键菜单</h3>
+<ul>
+  <li><code>在资源管理器中打开</code> — 在 Windows 资源管理器中定位到该文件</li>
+  <li><code>复制路径</code> — 将文件完整路径复制到剪贴板</li>
+</ul>
+
 <h2 id="ssh-jumphost">跳板机</h2>
-<p>如果目标服务器需要通过跳板机访问，可以在连接配置中指定 Jump Host。</p>
+<p>如果目标服务器需要通过跳板机访问，可以在连接配置中指定跳板机。</p>
 <ol>
   <li>先在连接列表中创建跳板机的连接配置</li>
-  <li>编辑目标服务器的连接配置，在 Jump Host 字段中选择跳板机</li>
+  <li>编辑目标服务器的连接配置，在 <code>跳板机</code> 字段中选择跳板机</li>
   <li>连接时会自动先连接跳板机，再通过端口转发连接到目标服务器</li>
 </ol>
 
 <h2 id="ssh-import-export">导入 / 导出</h2>
-<p>点击侧边栏的 <code>⇄</code> 按钮打开导入导出对话框。</p>
+<p>点击侧边栏底部工具栏的导入导出按钮打开对话框。</p>
 <ul>
-  <li>导出：将所有连接配置导出为 JSON 文件，方便备份或迁移</li>
-  <li>导入：从 JSON 文件导入连接配置，支持批量导入，无效条目会给出错误提示</li>
+  <li>导出：将所有连接配置导出为 JSON，方便备份或迁移到其他电脑</li>
+  <li>导入：从 JSON 文件导入连接配置，支持批量导入</li>
 </ul>
 
 <!-- ==================== 网络调试助手 ==================== -->
 
 <h2 id="net-overview">网络调试助手</h2>
-<p>XenoTerm 内置了网络调试助手，支持 TCP 和 UDP 协议的数据收发测试，适用于嵌入式开发、协议调试、服务端测试等场景。</p>
-<p>点击侧边栏的 <code>🔌</code> 按钮打开网络调试面板。</p>
+<p>内置网络调试助手，支持 TCP 和 UDP 协议的数据收发测试。点击侧边栏底部工具栏的 🔌 按钮打开。</p>
 
 <h3>支持的模式</h3>
-<table style="width:100%; border-collapse:collapse; margin:12px 0 20px; font-size:13px;">
-  <thead>
-    <tr style="border-bottom:1px solid var(--border);">
-      <th style="text-align:left; padding:8px; color:var(--text-dim);">模式</th>
-      <th style="text-align:left; padding:8px; color:var(--text-dim);">说明</th>
-      <th style="text-align:left; padding:8px; color:var(--text-dim);">典型用途</th>
-    </tr>
-  </thead>
+<table>
+  <thead><tr><th>模式</th><th>说明</th><th>典型用途</th></tr></thead>
   <tbody>
-    <tr style="border-bottom:1px solid var(--border);">
-      <td style="padding:8px;"><span class="badge badge-tcp">TCP Client</span></td>
-      <td style="padding:8px; color:var(--text-sec);">连接到远程 TCP 服务器</td>
-      <td style="padding:8px; color:var(--text-sec);">测试服务端接口、协议调试</td>
-    </tr>
-    <tr style="border-bottom:1px solid var(--border);">
-      <td style="padding:8px;"><span class="badge badge-server">TCP Server</span></td>
-      <td style="padding:8px; color:var(--text-sec);">监听本地端口，接受客户端连接</td>
-      <td style="padding:8px; color:var(--text-sec);">模拟服务端、测试客户端设备</td>
-    </tr>
-    <tr>
-      <td style="padding:8px;"><span class="badge badge-udp">UDP</span></td>
-      <td style="padding:8px; color:var(--text-sec);">UDP 数据报收发</td>
-      <td style="padding:8px; color:var(--text-sec);">嵌入式设备通信、广播测试</td>
-    </tr>
+    <tr><td><span class="badge badge-tcp">TCP Client</span></td><td>连接到远程 TCP 服务器</td><td>测试服务端接口、协议调试</td></tr>
+    <tr><td><span class="badge badge-server">TCP Server</span></td><td>监听本地端口，接受客户端连接</td><td>模拟服务端、测试客户端设备</td></tr>
+    <tr><td><span class="badge badge-udp">UDP</span></td><td>UDP 数据报收发</td><td>设备通信、广播测试</td></tr>
   </tbody>
 </table>
 
 <h2 id="net-tcp-client">TCP Client</h2>
 <ol>
-  <li>点击 <code>+ New</code>，选择 <code>TCP Client</code></li>
+  <li>点击 <code>+ 新建</code>，选择 <code>TCP 客户端</code></li>
   <li>输入目标服务器的 IP 地址和端口号</li>
-  <li>点击 <code>Connect</code> 建立连接</li>
-  <li>连接成功后，在底部输入框输入数据并点击 <code>Send</code> 发送</li>
-  <li>接收到的数据会实时显示在消息列表中</li>
+  <li>点击 <code>连接</code> 建立连接</li>
+  <li>在底部输入框输入数据并发送</li>
 </ol>
 
 <h2 id="net-tcp-server">TCP Server</h2>
 <ol>
-  <li>点击 <code>+ New</code>，选择 <code>TCP Server</code></li>
-  <li>输入监听地址（默认 <code>127.0.0.1</code>，填 <code>0.0.0.0</code> 监听所有网卡）和端口号</li>
-  <li>点击 <code>Start Listening</code> 开始监听</li>
-  <li>当有客户端连接时，状态栏会显示连接数</li>
+  <li>点击 <code>+ 新建</code>，选择 <code>TCP 服务器</code></li>
+  <li>输入监听地址（<code>0.0.0.0</code> 监听所有网卡）和端口号</li>
+  <li>点击 <code>开始监听</code></li>
+  <li>当有客户端连接时，状态栏显示连接数</li>
   <li>可以选择向特定客户端或所有客户端广播发送数据</li>
 </ol>
 
 <h2 id="net-udp">UDP</h2>
 <ol>
-  <li>点击 <code>+ New</code>，选择 <code>UDP</code></li>
-  <li>输入目标 IP 和端口（发送目标）</li>
-  <li>可选填写本地绑定端口（用于接收数据，留空则自动分配）</li>
-  <li>点击 <code>Connect</code> 创建 UDP socket</li>
-  <li>发送数据会以 UDP 数据报形式发送到目标地址</li>
-  <li>如果绑定了本地端口，可以接收其他设备发来的数据</li>
+  <li>点击 <code>+ 新建</code>，选择 <code>UDP</code></li>
+  <li>输入目标 IP 和端口</li>
+  <li>可选填写本地绑定端口（留空则自动分配）</li>
+  <li>点击 <code>连接</code> 创建 UDP socket</li>
 </ol>
 
 <h2 id="net-encoding">编码与显示</h2>
-<p>网络调试助手支持两种数据编码模式：</p>
 <ul>
-  <li><code>UTF-8</code>：以文本形式发送和显示数据，适合文本协议（如 HTTP、MQTT 等）</li>
-  <li><code>HEX</code>：以十六进制形式发送和显示数据，适合二进制协议</li>
+  <li><code>UTF-8</code>：以文本形式收发，适合文本协议</li>
+  <li><code>HEX</code>：以十六进制形式收发，适合二进制协议</li>
 </ul>
+<div class="tip">💡 发送 HEX 数据时，输入十六进制字符串即可，例如 <code>48656C6C6F</code> 等同于文本 <code>Hello</code>。</div>
 
-<h3>发送 HEX 数据</h3>
-<p>切换发送编码为 HEX 后，在输入框中输入十六进制字符串，例如：</p>
-<pre><code>48656C6C6F</code></pre>
-<p>等同于发送文本 <code>Hello</code>。</p>
-
-<h3>切换显示编码</h3>
-<p>消息列表顶部的编码选择器可以随时切换显示模式，在 UTF-8 和 HEX 之间切换查看同一份数据。</p>
+<h2 id="net-template">发送模板</h2>
+<p>预定义多条常用指令，支持命名、编码选择、一键发送和定时循环发送。</p>
+<ul>
+  <li>点击 <code>+ 添加</code> 创建发送模板</li>
+  <li>每条模板可设置名称、数据内容、编码格式（HEX/UTF-8）</li>
+  <li>支持单次发送和定时发送（设置间隔毫秒数）</li>
+  <li>支持收起/展开模板面板</li>
+</ul>
 
 <!-- ==================== 串口调试助手 ==================== -->
 
 <h2 id="serial-overview">串口调试助手</h2>
-<p>XenoTerm 内置串口调试助手，支持常见的串口通信参数配置和数据收发，适用于嵌入式开发、单片机调试、设备通信等场景。</p>
-<p>点击侧边栏底部工具栏的 <code>🔗 Serial</code> 按钮打开串口调试面板。</p>
+<p>内置串口调试助手，支持串口通信、Modbus RTU、发送模板等功能。点击侧边栏底部工具栏的 ⚡ 按钮打开。</p>
 
 <h3>打开串口</h3>
 <ol>
-  <li>点击 <code>+ New</code>，系统会自动扫描可用串口</li>
-  <li>从下拉列表中选择串口（如 <code>COM3</code>），点击 <code>↻</code> 可刷新列表</li>
-  <li>配置通信参数（波特率、数据位、停止位、校验位、流控）</li>
-  <li>点击 <code>Open Port</code> 打开串口</li>
-  <li>在底部输入框输入数据并点击 <code>Send</code> 发送</li>
+  <li>点击 <code>+ 新建</code>，系统自动扫描可用串口</li>
+  <li>从下拉列表中选择串口（如 <code>COM3</code>），点击 <code>↻</code> 刷新列表</li>
+  <li>配置通信参数</li>
+  <li>点击 <code>打开端口</code></li>
 </ol>
 
 <h2 id="serial-config">串口配置</h2>
-<table style="width:100%; border-collapse:collapse; margin:12px 0 20px; font-size:13px;">
-  <thead>
-    <tr style="border-bottom:1px solid var(--border);">
-      <th style="text-align:left; padding:8px; color:var(--text-dim);">参数</th>
-      <th style="text-align:left; padding:8px; color:var(--text-dim);">可选值</th>
-      <th style="text-align:left; padding:8px; color:var(--text-dim);">默认值</th>
-    </tr>
-  </thead>
+<table>
+  <thead><tr><th>参数</th><th>可选值</th><th>默认值</th></tr></thead>
   <tbody>
-    <tr style="border-bottom:1px solid var(--border);">
-      <td style="padding:8px; color:var(--text-sec);">波特率 (Baud Rate)</td>
-      <td style="padding:8px; color:var(--text-sec);">300 ~ 921600</td>
-      <td style="padding:8px; color:var(--text-sec);">115200</td>
-    </tr>
-    <tr style="border-bottom:1px solid var(--border);">
-      <td style="padding:8px; color:var(--text-sec);">数据位 (Data Bits)</td>
-      <td style="padding:8px; color:var(--text-sec);">5, 6, 7, 8</td>
-      <td style="padding:8px; color:var(--text-sec);">8</td>
-    </tr>
-    <tr style="border-bottom:1px solid var(--border);">
-      <td style="padding:8px; color:var(--text-sec);">停止位 (Stop Bits)</td>
-      <td style="padding:8px; color:var(--text-sec);">1, 1.5, 2</td>
-      <td style="padding:8px; color:var(--text-sec);">1</td>
-    </tr>
-    <tr style="border-bottom:1px solid var(--border);">
-      <td style="padding:8px; color:var(--text-sec);">校验位 (Parity)</td>
-      <td style="padding:8px; color:var(--text-sec);">None, Even, Odd</td>
-      <td style="padding:8px; color:var(--text-sec);">None</td>
-    </tr>
-    <tr>
-      <td style="padding:8px; color:var(--text-sec);">流控 (Flow Control)</td>
-      <td style="padding:8px; color:var(--text-sec);">None, RTS/CTS, XON/XOFF</td>
-      <td style="padding:8px; color:var(--text-sec);">None</td>
-    </tr>
+    <tr><td>波特率</td><td>300 ~ 921600</td><td>115200</td></tr>
+    <tr><td>数据位</td><td>5, 6, 7, 8</td><td>8</td></tr>
+    <tr><td>停止位</td><td>1, 1.5, 2</td><td>1</td></tr>
+    <tr><td>校验位</td><td>无, 偶校验, 奇校验</td><td>无</td></tr>
+    <tr><td>流控</td><td>无, RTS/CTS, XON/XOFF</td><td>无</td></tr>
   </tbody>
 </table>
 
 <h2 id="serial-signals">控制信号</h2>
-<p>串口打开后，可以通过顶部的 DTR 和 RTS 按钮控制信号线状态：</p>
+<p>串口打开后，可以通过顶部按钮控制 DTR 和 RTS 信号线状态：</p>
 <ul>
-  <li><code>DTR</code> (Data Terminal Ready)：数据终端就绪信号，常用于通知设备主机已准备好通信。某些开发板（如 ESP32）使用 DTR 信号触发复位。</li>
-  <li><code>RTS</code> (Request To Send)：请求发送信号，用于硬件流控或设备控制。某些开发板使用 RTS 信号进入下载模式。</li>
+  <li><code>DTR</code> (Data Terminal Ready)：某些开发板（如 ESP32）使用 DTR 触发复位</li>
+  <li><code>RTS</code> (Request To Send)：某些开发板使用 RTS 进入下载模式</li>
 </ul>
-<p>点击按钮可以切换 ON/OFF 状态，绿色表示高电平（ON），灰色表示低电平（OFF）。</p>
+
+<h2 id="serial-modbus">Modbus RTU</h2>
+<p>切换到 Modbus RTU 模式后，可以直接进行 Modbus 寄存器读写操作。</p>
+<ul>
+  <li>选择功能码（FC01~FC06、FC15、FC16 等）</li>
+  <li>填写从站地址、寄存器起始地址、数量/值</li>
+  <li>点击发送，自动计算 CRC 校验</li>
+  <li>响应数据自动解析显示</li>
+</ul>
+
+<h3>寄存器监控</h3>
+<p>设置轮询间隔后，自动周期性读取寄存器并以表格形式显示：</p>
+<ul>
+  <li>显示寄存器地址、十进制值、十六进制值</li>
+  <li>数据实时刷新，变化一目了然</li>
+  <li>支持启动/停止轮询</li>
+</ul>
+
+<h2 id="serial-template">发送模板（串口）</h2>
+<p>与网络调试的发送模板功能一致，支持预定义多条指令、命名、HEX/UTF-8 编码、单次发送和定时循环发送。</p>
+
+<!-- ==================== CAN 总线调试 ==================== -->
+
+<h2 id="can-overview">CAN 总线调试</h2>
+<p>内置 CAN 总线调试工具，支持 CAN 2.0 和 CAN FD，DBC 信号解析，J1939 协议，UDS 诊断，信号监控图表等。点击侧边栏底部工具栏的 🚗 按钮打开。</p>
+
+<h3>支持的硬件</h3>
+<table>
+  <thead><tr><th>驱动</th><th>说明</th><th>CAN FD</th><th>双通道</th></tr></thead>
+  <tbody>
+    <tr><td>ZLG（周立功）</td><td>USBCAN-II 等设备</td><td>—</td><td>✅</td></tr>
+    <tr><td>GC（广成科技）</td><td>USBCAN-II 设备</td><td>—</td><td>✅</td></tr>
+    <tr><td>GC-FD（广成 CAN FD）</td><td>USBCANFD 设备</td><td>✅</td><td>✅</td></tr>
+    <tr><td>Virtual（虚拟设备）</td><td>无需硬件，自动生成模拟报文</td><td>—</td><td>—</td></tr>
+  </tbody>
+</table>
+
+<h2 id="can-connect">连接与配置</h2>
+<ol>
+  <li>选择 CAN 驱动</li>
+  <li>选择设备类型和通道号</li>
+  <li>设置仲裁域波特率（常用：250kbps、500kbps、1Mbps）</li>
+  <li>点击 <code>连接</code> 打开 CAN 通道</li>
+</ol>
+<p>双通道设备（ZLG、GC、GC-FD）打开时会自动初始化两个通道，每个通道可独立配置波特率。</p>
+<div class="tip">💡 选择 Virtual 驱动可以在没有硬件的情况下体验全部 CAN 调试功能。</div>
+
+<h2 id="can-fd">CAN FD 支持</h2>
+<p>选择 <code>GC-FD</code> 驱动后，可以配置 CAN FD 相关参数：</p>
+<ul>
+  <li><code>数据域波特率</code>：CAN FD 数据段的波特率（如 2Mbps、5Mbps）</li>
+  <li>支持发送 CAN FD 帧（DLC 最大 64 字节）</li>
+  <li>两个通道可分别配置不同的仲裁域和数据域波特率</li>
+</ul>
+
+<h2 id="can-dbc">DBC 文件解析</h2>
+<p>支持导入 DBC（Database CAN）文件，自动解析报文和信号定义。</p>
+<ul>
+  <li>点击 <code>📂 导入 DBC</code> 按钮选择文件</li>
+  <li>导入后，接收到的报文自动解析并显示信号名称和物理值</li>
+  <li>支持 factor、offset、min/max、unit 等信号属性</li>
+  <li>支持 Intel（小端）和 Motorola（大端）字节序</li>
+  <li>支持更换或卸载 DBC 文件</li>
+</ul>
+
+<h2 id="can-j1939">J1939 协议</h2>
+<p>对于 29 位扩展帧，自动按 J1939 协议解析 PGN（Parameter Group Number）：</p>
+<ul>
+  <li>从 CAN ID 中提取优先级、PGN、源地址</li>
+  <li>如果已加载 J1939 DBC 文件，自动匹配 PGN 并解析信号</li>
+  <li>J1939 消息在报文列表中单独显示 PGN 信息</li>
+</ul>
+
+<h2 id="can-monitor">报文监控</h2>
+<p>CAN 通道打开后，接收到的报文实时显示在消息列表中：</p>
+<ul>
+  <li>显示时间戳、方向（TX/RX）、CAN ID、DLC、数据字节</li>
+  <li>发送的报文也会显示在列表中，标记为 TX</li>
+  <li>支持按方向过滤（全部 / 发送 / 接收）</li>
+  <li>总线负载实时统计显示</li>
+  <li>右键报文可快速填入发送栏或添加到信号监控</li>
+</ul>
+
+<h2 id="can-signal">信号监控与图表</h2>
+<p>选中 DBC 信号后可添加到信号监控面板，提供三种视图：</p>
+
+<h3>仪表盘视图</h3>
+<p>以仪表盘形式显示信号当前值，直观查看信号状态。</p>
+
+<h3>波形图视图</h3>
+<ul>
+  <li>实时绘制信号变化曲线，支持多信号叠加显示</li>
+  <li>支持暂停/继续、复位视图</li>
+  <li>鼠标滚轮缩放，拖拽平移</li>
+  <li>Y 轴自动适应信号范围</li>
+  <li>支持导出 CSV 数据</li>
+</ul>
+
+<h3>表格视图</h3>
+<p>以表格形式显示所有监控信号的当前值、最小值、最大值、单位。支持滑块控件直接修改信号值用于发送。</p>
+
+<h2 id="can-send">报文发送</h2>
+<h3>手动发送</h3>
+<p>在发送栏输入 CAN ID 和数据字节，点击发送。支持标准帧和扩展帧，支持 CAN FD 帧。</p>
+
+<h3>发送列表</h3>
+<ul>
+  <li>点击 <code>+ 添加</code> 创建发送项，设置 CAN ID、DLC、数据</li>
+  <li>支持单次发送和定时循环发送（设置间隔毫秒数）</li>
+  <li>如果已加载 DBC，可以按信号编辑数据内容</li>
+  <li>支持删除发送项</li>
+</ul>
+
+<h3>ASC 录制与回放</h3>
+<ul>
+  <li><code>⏺ 录制 ASC</code>：将收发的报文录制为 ASC 格式日志文件</li>
+  <li><code>▶ 回放 ASC</code>：导入 ASC 文件，按时间戳回放报文</li>
+</ul>
+
+<h2 id="can-uds">UDS 诊断</h2>
+<p>内置 UDS（Unified Diagnostic Services，ISO 14229）诊断面板，支持常用诊断服务。</p>
+
+<h3>基本配置</h3>
+<ul>
+  <li><code>请求 ID (TxID)</code>：诊断请求的 CAN ID（如 0x7DF 或 0x741）</li>
+  <li><code>响应 ID (RxID)</code>：诊断响应的 CAN ID（如 0x7E8 或 0x749）</li>
+</ul>
+
+<h3>支持的服务</h3>
+<table>
+  <thead><tr><th>服务</th><th>SID</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td>会话控制</td><td>0x10</td><td>切换默认/编程/扩展会话</td></tr>
+    <tr><td>ECU 复位</td><td>0x11</td><td>硬复位/软复位/KeyOff-On</td></tr>
+    <tr><td>安全访问</td><td>0x27</td><td>请求种子、发送密钥</td></tr>
+    <tr><td>读 DID</td><td>0x22</td><td>读取数据标识符</td></tr>
+    <tr><td>写 DID</td><td>0x2E</td><td>写入数据标识符</td></tr>
+    <tr><td>清除 DTC</td><td>0x14</td><td>清除诊断故障码</td></tr>
+    <tr><td>读取 DTC</td><td>0x19</td><td>读取诊断故障码</td></tr>
+    <tr><td>IO 控制</td><td>0x2F</td><td>输入输出控制</td></tr>
+    <tr><td>例程控制</td><td>0x31</td><td>启动/停止/查询例程</td></tr>
+    <tr><td>原始数据</td><td>自定义</td><td>直接发送 Hex 数据</td></tr>
+  </tbody>
+</table>
+
+<h3>TesterPresent 心跳</h3>
+<p>点击 <code>▶ 启动心跳</code> 后，自动周期性发送 TesterPresent (0x3E) 请求，保持诊断会话不超时。</p>
+
+<h3>ISO-TP 分包</h3>
+<p>UDS 请求和响应自动通过 ISO-TP（ISO 15765-2）协议进行分包和重组，支持多帧传输，无需手动处理。</p>
+
+<h3>通信日志</h3>
+<p>所有 UDS 请求和响应记录在日志表格中，显示序号、方向、SID、服务名、数据、结果（正响应/负响应及 NRC 码）。</p>
+
+<h2 id="can-export">数据导出</h2>
+<ul>
+  <li><code>📥 导出 CSV</code>：将信号监控数据导出为 CSV 文件</li>
+  <li><code>📦 导出 BLF</code>：将 CAN 报文导出为 BLF（Binary Logging Format）文件，可用 Vector CANalyzer 等工具打开</li>
+  <li><code>⏺ 录制 ASC</code>：实时录制为 ASC 格式日志</li>
+</ul>
+
+<!-- ==================== EtherCAT 主站 ==================== -->
+
+<h2 id="ecat-overview">EtherCAT 主站</h2>
+<p>内置 EtherCAT 主站功能（基于 SOEM），支持从站扫描、状态管理、SDO/PDO 通信、OD 浏览、FoE 固件升级、SII 读写等。点击侧边栏底部工具栏的 ⚙️ 按钮打开。</p>
+<div class="tip">💡 EtherCAT 功能依赖 WinPcap 或 Npcap 网络驱动。如果没有安装硬件驱动，可以选择 Virtual 模式体验功能。</div>
+
+<h2 id="ecat-connect">连接与扫描</h2>
+<ol>
+  <li>从网络适配器列表中选择连接 EtherCAT 从站的网卡</li>
+  <li>点击 <code>🔗 连接</code> 初始化主站并扫描从站</li>
+  <li>扫描完成后，左侧显示从站列表（名称、状态、厂商信息）</li>
+  <li>点击从站查看详细信息</li>
+</ol>
+
+<h3>状态管理</h3>
+<table>
+  <thead><tr><th>状态</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td><code>INIT</code></td><td>初始化状态，从站刚上电或复位后</td></tr>
+    <tr><td><code>PRE-OP</code></td><td>预操作状态，可进行 SDO 通信和邮箱配置</td></tr>
+    <tr><td><code>SAFE-OP</code></td><td>安全操作状态，PDO 输入有效但输出无效</td></tr>
+    <tr><td><code>OP</code></td><td>操作状态，PDO 输入输出均有效</td></tr>
+  </tbody>
+</table>
+<p>可以通过状态切换按钮请求从站进入指定状态。状态切换失败时会显示 AL Status Code 及中文说明。</p>
+
+<h3>错误计数器</h3>
+<p>显示每个从站的 Invalid Frame、RX Error、Lost Link 计数，支持一键清零。</p>
+
+<h2 id="ecat-sdo">SDO 读写</h2>
+<p>SDO（Service Data Object）用于访问从站的对象字典。</p>
+<ul>
+  <li>输入 Index（对象索引）和 SubIndex（子索引）</li>
+  <li>选择数据类型（UINT8、INT16、UINT32 等）</li>
+  <li>点击 <code>📖 读取</code> 或 <code>✏️ 写入</code></li>
+</ul>
+
+<h3>OD 浏览器</h3>
+<ul>
+  <li>点击 <code>Scan OD</code> 扫描从站完整对象字典</li>
+  <li>支持导入 ESI（EtherCAT Slave Information）XML 文件，获取对象名称和描述</li>
+</ul>
+
+<h2 id="ecat-pdo">PDO 映射</h2>
+<p>PDO（Process Data Object）用于实时周期性数据交换。</p>
+<ul>
+  <li>点击 <code>▶ 启动 PDO</code> 开始周期性数据交换</li>
+  <li>输入 PDO 数据实时显示，输出 PDO 可手动修改并写入</li>
+  <li>点击 <code>📡 解析信号</code> 将 PDO 数据解析为具名信号（需要 ESI 文件）</li>
+  <li>支持信号实时波形图绘制</li>
+</ul>
+
+<h2 id="ecat-foe">FoE 固件升级</h2>
+<p>FoE（File over EtherCAT）用于向从站上传固件文件。</p>
+<ol>
+  <li>确保从站处于 <code>PRE-OP</code> 或 <code>INIT</code> 状态</li>
+  <li>选择固件文件</li>
+  <li>输入文件名和密码（如果需要）</li>
+  <li>点击 <code>Upload</code> 开始上传，进度条显示传输进度</li>
+</ol>
+
+<h2 id="ecat-sii">SII 读写</h2>
+<p>SII（Slave Information Interface）用于读写从站 EEPROM 中的身份信息。</p>
+<ul>
+  <li>输入偏移地址和读取长度，点击读取</li>
+  <li>支持写入 SII 数据（谨慎操作，错误写入可能导致从站无法识别）</li>
+</ul>
 
 <!-- ==================== 其他 ==================== -->
 
 <h2 id="shortcuts">快捷操作</h2>
-<table style="width:100%; border-collapse:collapse; margin:12px 0 20px; font-size:13px;">
-  <thead>
-    <tr style="border-bottom:1px solid var(--border);">
-      <th style="text-align:left; padding:8px; color:var(--text-dim);">操作</th>
-      <th style="text-align:left; padding:8px; color:var(--text-dim);">方式</th>
-    </tr>
-  </thead>
+<table>
+  <thead><tr><th>快捷键</th><th>功能</th><th>适用范围</th></tr></thead>
   <tbody>
-    <tr style="border-bottom:1px solid var(--border);">
-      <td style="padding:8px; color:var(--text-sec);">快速连接</td>
-      <td style="padding:8px; color:var(--text-sec);">双击侧边栏连接条目</td>
-    </tr>
-    <tr style="border-bottom:1px solid var(--border);">
-      <td style="padding:8px; color:var(--text-sec);">右键菜单</td>
-      <td style="padding:8px; color:var(--text-sec);">右键点击连接条目 → Connect / Edit / Delete</td>
-    </tr>
-    <tr style="border-bottom:1px solid var(--border);">
-      <td style="padding:8px; color:var(--text-sec);">创建分屏</td>
-      <td style="padding:8px; color:var(--text-sec);">拖拽标签页到另一个标签页或窗格边缘</td>
-    </tr>
-    <tr style="border-bottom:1px solid var(--border);">
-      <td style="padding:8px; color:var(--text-sec);">调整分屏</td>
-      <td style="padding:8px; color:var(--text-sec);">拖动分隔线</td>
-    </tr>
-    <tr style="border-bottom:1px solid var(--border);">
-      <td style="padding:8px; color:var(--text-sec);">关闭标签页</td>
-      <td style="padding:8px; color:var(--text-sec);">点击标签页上的 ✕ 按钮</td>
-    </tr>
-    <tr style="border-bottom:1px solid var(--border);">
-      <td style="padding:8px; color:var(--text-sec);">切换侧边栏</td>
-      <td style="padding:8px; color:var(--text-sec);">点击侧边栏顶部的 ◀ 按钮</td>
-    </tr>
-    <tr>
-      <td style="padding:8px; color:var(--text-sec);">打开网络调试</td>
-      <td style="padding:8px; color:var(--text-sec);">点击侧边栏底部的 🔌 Network 按钮</td>
-    </tr>
-    <tr>
-      <td style="padding:8px; color:var(--text-sec);">打开串口调试</td>
-      <td style="padding:8px; color:var(--text-sec);">点击侧边栏底部的 🔗 Serial 按钮</td>
-    </tr>
+    <tr><td><code>Ctrl+Shift+C</code></td><td>复制选中文本</td><td>SSH 终端</td></tr>
+    <tr><td><code>Ctrl+Shift+V</code></td><td>粘贴剪贴板内容</td><td>SSH 终端</td></tr>
+    <tr><td><code>鼠标选中</code></td><td>自动复制到剪贴板</td><td>SSH 终端</td></tr>
+    <tr><td><code>鼠标右键</code></td><td>粘贴</td><td>SSH 终端</td></tr>
+    <tr><td><code>Ctrl+鼠标滚轮</code></td><td>缩放终端字体</td><td>SSH 终端</td></tr>
+    <tr><td><code>拖拽标签页</code></td><td>分屏 / 合并窗格</td><td>工作区</td></tr>
+    <tr><td><code>拖拽分隔线</code></td><td>调整分屏比例</td><td>工作区</td></tr>
+    <tr><td><code>拖拽文件</code></td><td>上传到远端 / 下载到本地</td><td>SFTP</td></tr>
+    <tr><td><code>从桌面拖入文件</code></td><td>上传到远端当前目录</td><td>SFTP</td></tr>
+    <tr><td><code>点击列头</code></td><td>按名称/大小/时间排序</td><td>SFTP</td></tr>
+    <tr><td><code>右键文件</code></td><td>重命名/权限/删除/打开位置/复制路径</td><td>SFTP</td></tr>
+    <tr><td><code>鼠标滚轮</code></td><td>缩放信号波形图</td><td>CAN 信号图表</td></tr>
+    <tr><td><code>鼠标拖拽</code></td><td>平移信号波形图</td><td>CAN 信号图表</td></tr>
   </tbody>
 </table>
 
 <h2 id="theme">主题切换</h2>
-<p>点击侧边栏顶部的 ☀️ / 🌙 按钮可以在深色和浅色主题之间切换。主题设置会自动保存。</p>
+<p>XenoTerm 支持深色和浅色两种主题。点击侧边栏底部工具栏的主题切换按钮即可切换。</p>
+<ul>
+  <li>深色主题（默认）：适合长时间使用，减少眼睛疲劳</li>
+  <li>浅色主题：适合明亮环境下使用</li>
+  <li>主题设置会自动保存，下次启动时恢复</li>
+</ul>
+
+<h2 id="license">许可证</h2>
+<p>XenoTerm 需要有效的许可证才能使用全部功能。</p>
+<ul>
+  <li>点击侧边栏底部工具栏的许可证按钮打开激活对话框</li>
+  <li>输入许可证密钥并点击激活</li>
+  <li>激活成功后显示许可证状态和到期时间</li>
+  <li>许可证绑定当前设备，不可在多台设备上同时使用</li>
+</ul>
 
 <h2 id="faq">常见问题</h2>
 
-<h3>连接超时怎么办？</h3>
+<h3>SSH 连接失败怎么办？</h3>
 <ul>
   <li>检查目标服务器的 IP 地址和端口是否正确</li>
-  <li>确认网络连通性（可以先 ping 一下目标地址）</li>
-  <li>检查防火墙是否放行了对应端口</li>
-  <li>如果使用跳板机，确认跳板机配置正确且可达</li>
+  <li>确认目标服务器的 SSH 服务已启动</li>
+  <li>检查防火墙是否放行了 SSH 端口</li>
+  <li>如果使用公钥认证，确认私钥文件路径正确且格式有效</li>
+  <li>如果使用跳板机，确认跳板机连接配置正确</li>
 </ul>
 
-<h3>认证失败怎么办？</h3>
+<h3>SFTP 传输速度慢？</h3>
 <ul>
-  <li>密码认证：确认用户名和密码正确</li>
-  <li>公钥认证：确认私钥文件路径正确，且对应的公钥已添加到服务器的 <code>~/.ssh/authorized_keys</code></li>
-  <li>如果私钥有密码保护，确认 Passphrase 填写正确</li>
+  <li>XenoTerm 默认使用 25 路并发 + 128KB 分块加速传输</li>
+  <li>如果速度仍然较慢，可能是网络带宽限制或服务器端限速</li>
+  <li>检查是否通过跳板机连接，跳板机可能成为瓶颈</li>
 </ul>
 
-<h3>TCP Server 监听失败？</h3>
+<h3>CAN 设备连接不上？</h3>
 <ul>
-  <li>端口可能已被其他程序占用，换一个端口试试</li>
-  <li>监听 <code>0.0.0.0</code> 时可能需要管理员权限（端口号 &lt; 1024）</li>
+  <li>确认 CAN 适配器已正确连接到电脑 USB 端口</li>
+  <li>确认选择了正确的驱动类型（ZLG / GC / GC-FD）</li>
+  <li>检查设备管理器中是否识别到 CAN 适配器</li>
+  <li>确认 CAN 总线波特率与目标设备一致</li>
+  <li>检查 CAN 总线终端电阻是否正确（120Ω）</li>
 </ul>
 
-<h3>UDP 收不到数据？</h3>
+<h3>CAN FD 帧收发异常？</h3>
 <ul>
-  <li>确认已填写本地绑定端口，且发送方的目标端口与之一致</li>
-  <li>检查防火墙是否放行了 UDP 端口</li>
+  <li>确认使用 GC-FD 驱动，其他驱动不支持 CAN FD</li>
+  <li>确认仲裁域和数据域波特率配置正确</li>
+  <li>确认对端设备也支持并启用了 CAN FD</li>
 </ul>
 
-<h3>配置文件在哪里？</h3>
-<p>配置文件保存在系统用户数据目录下：</p>
-<pre><code>%APPDATA%/xenoterm/ssh-client-config.json</code></pre>
+<h3>EtherCAT 扫描不到从站？</h3>
+<ul>
+  <li>确认已安装 WinPcap 或 Npcap 网络驱动</li>
+  <li>确认选择了正确的网络适配器（连接从站的那个网卡）</li>
+  <li>检查网线连接是否正常</li>
+  <li>尝试以管理员权限运行 XenoTerm</li>
+</ul>
 
-<div style="margin-top:60px; padding-top:20px; border-top:1px solid var(--border); text-align:center;">
-  <p style="color:var(--text-dim); font-size:12px;">XenoTerm v1.0.0 · Built with Electron</p>
+<h3>串口打不开？</h3>
+<ul>
+  <li>确认串口设备已连接并在设备管理器中显示</li>
+  <li>确认串口没有被其他程序占用</li>
+  <li>点击刷新按钮重新扫描可用串口</li>
+  <li>尝试拔插 USB 转串口设备后重试</li>
+</ul>
+
+<h3>如何导出 CAN 数据用于分析？</h3>
+<ul>
+  <li>BLF 格式：可用 Vector CANalyzer、CANoe 等工具打开分析</li>
+  <li>CSV 格式：可用 Excel 或 Python 脚本进行数据处理</li>
+  <li>ASC 格式：通用 CAN 日志格式，兼容大多数 CAN 分析工具</li>
+</ul>
+
+<div class="footer">
+  <p>© 2025 XenoTerm. All rights reserved.</p>
 </div>
 
 </main>

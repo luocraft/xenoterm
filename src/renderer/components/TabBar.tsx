@@ -1,9 +1,11 @@
 import React, { useRef, useState } from 'react';
 import { useAppStore } from '../store/app-store';
 import { useLayoutStore } from '../store/layout-store';
+import { useT } from '../i18n';
 import { disposeTerminal } from './TerminalView';
 
 export default function TabBar() {
+  const t = useT();
   const sessions = useAppStore((s) => s.sessions);
   const disconnectSession = useAppStore((s) => s.disconnectSession);
   const removeSession = useAppStore((s) => s.removeSession);
@@ -20,6 +22,22 @@ export default function TabBar() {
   const tabs = useLayoutStore((s) => s.tabs);
   const activeTabId = useLayoutStore((s) => s.activeTabId);
   const workspaces = useLayoutStore((s) => s.workspaces);
+
+  const reconnectSession = useAppStore((s) => s.reconnectSession);
+
+  const [reconnectingId, setReconnectingId] = useState<string | null>(null);
+
+  const handleReconnect = async (e: React.MouseEvent, sessionId: string) => {
+    e.stopPropagation();
+    setReconnectingId(sessionId);
+    try {
+      await reconnectSession(sessionId);
+    } catch (err) {
+      console.error('Reconnect failed:', err);
+    } finally {
+      setReconnectingId(null);
+    }
+  };
 
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
 
@@ -153,7 +171,7 @@ export default function TabBar() {
           onClick={toggleSidebar}
           className="app-no-drag px-2 py-1 text-xs transition-colors"
           style={{ color: 'var(--color-text-muted)' }}
-          title="Show sidebar"
+          title={t('tabBar.showSidebar')}
         >
           ▶
         </button>
@@ -207,6 +225,17 @@ export default function TabBar() {
               >
                 <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${statusColor(getSessionStatus(sid))}`} />
                 <span className="truncate">{getSessionLabel(sid)}</span>
+                {(getSessionStatus(sid) === 'disconnected' || getSessionStatus(sid) === 'error') && (
+                  <button
+                    onClick={(e) => handleReconnect(e, sid)}
+                    disabled={reconnectingId === sid}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 hover:text-[var(--color-accent)]"
+                    style={{ color: 'var(--color-text-dim)', fontSize: '12px', lineHeight: 1 }}
+                    title="Reconnect"
+                  >
+                    {reconnectingId === sid ? '⏳' : '🔄'}
+                  </button>
+                )}
                 <button
                   onClick={(e) => handleCloseSession(e, sid)}
                   className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 hover:text-red-400"
@@ -269,7 +298,7 @@ export default function TabBar() {
               timestampGutterVisible ? 'text-[var(--color-accent)]' : ''
             }`}
             style={{ color: timestampGutterVisible ? undefined : 'var(--color-text-muted)' }}
-            title={timestampGutterVisible ? 'Hide timestamps' : 'Show timestamps'}
+            title={timestampGutterVisible ? t('tabBar.timestamps') : t('tabBar.timestamps')}
           >
             🕑
           </button>
@@ -279,7 +308,7 @@ export default function TabBar() {
               commandHistoryVisible ? 'text-[var(--color-accent)]' : ''
             }`}
             style={{ color: commandHistoryVisible ? undefined : 'var(--color-text-muted)' }}
-            title={commandHistoryVisible ? 'Hide command history' : 'Show command history'}
+            title={commandHistoryVisible ? t('tabBar.cmdHistory') : t('tabBar.cmdHistory')}
           >
             🕐
           </button>
@@ -289,7 +318,7 @@ export default function TabBar() {
               splitPaneVisible ? 'text-[var(--color-accent)]' : ''
             }`}
             style={{ color: splitPaneVisible ? undefined : 'var(--color-text-muted)' }}
-            title={splitPaneVisible ? 'Hide file browser' : 'Show file browser'}
+            title={splitPaneVisible ? t('tabBar.fileBrowser') : t('tabBar.fileBrowser')}
           >
             📁
           </button>

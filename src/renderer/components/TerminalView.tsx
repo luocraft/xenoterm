@@ -60,25 +60,25 @@ function getDarkTheme() {
 function getLightTheme() {
   return {
     background: '#d5dbd7',
-    foreground: '#2e3532',
+    foreground: '#1a1f1c',
     cursor: '#4f46e5',
     cursorAccent: '#d5dbd7',
     selectionBackground: '#4f46e540',
-    black: '#2e3532',
-    red: '#bf3b3b',
-    green: '#2e7d32',
-    yellow: '#a67c00',
-    blue: '#1565c0',
-    magenta: '#7b1fa2',
-    cyan: '#00838f',
+    black: '#1a1f1c',
+    red: '#dc2626',
+    green: '#16a34a',
+    yellow: '#ca8a04',
+    blue: '#2563eb',
+    magenta: '#9333ea',
+    cyan: '#0891b2',
     white: '#d5dbd7',
-    brightBlack: '#636e68',
-    brightRed: '#d32f2f',
-    brightGreen: '#388e3c',
-    brightYellow: '#f9a825',
-    brightBlue: '#1e88e5',
-    brightMagenta: '#8e24aa',
-    brightCyan: '#0097a7',
+    brightBlack: '#6e7a73',
+    brightRed: '#ef4444',
+    brightGreen: '#22c55e',
+    brightYellow: '#eab308',
+    brightBlue: '#3b82f6',
+    brightMagenta: '#a855f7',
+    brightCyan: '#06b6d4',
     brightWhite: '#ecf0ed',
   };
 }
@@ -111,6 +111,7 @@ function getOrCreateTerminal(sessionId: string, isDark: boolean): CachedTerminal
     theme: config.theme,
     cursorBlink: true,
     cursorStyle: 'bar',
+    lineHeight: 1.15,
     scrollback: 10000,
     allowProposedApi: true,
   });
@@ -199,7 +200,7 @@ function getOrCreateTerminal(sessionId: string, isDark: boolean): CachedTerminal
 
         if (hasContent) {
           const y = row * cellHeight + cellHeight / 2;
-          ctx.fillStyle = dark ? '#52525b' : '#93a09a';
+          ctx.fillStyle = dark ? '#52525b' : '#95a09a';
           ctx.fillText(ts, 0, y);
         }
       }
@@ -345,11 +346,20 @@ function getOrCreateTerminal(sessionId: string, isDark: boolean): CachedTerminal
     renderGutter();
   });
 
+  // Auto-copy on selection
+  const selectionDisposable = terminal.onSelectionChange(() => {
+    const sel = terminal.getSelection();
+    if (sel) {
+      window.api.clipboard.writeText(sel);
+    }
+  });
+
   const ipcCleanup = () => {
     dataDisposable.dispose();
     resizeDisposable.dispose();
     scrollDisposable.dispose();
     lineFeedDisposable.dispose();
+    selectionDisposable.dispose();
     unsubData();
     unsubClose();
     unsubError();
@@ -451,31 +461,43 @@ export default function TerminalView({ sessionId }: TerminalViewProps) {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.shiftKey && e.key === 'C') {
         const selection = terminal.getSelection();
-        if (selection) navigator.clipboard.writeText(selection);
+        if (selection) window.api.clipboard.writeText(selection);
         e.preventDefault();
       }
       if (e.ctrlKey && e.shiftKey && e.key === 'V') {
-        navigator.clipboard.readText().then((text) => {
-          window.api.ssh.write(sessionId, text);
-        });
+        const text = window.api.clipboard.readText();
+        if (text) window.api.ssh.write(sessionId, text);
         e.preventDefault();
       }
     };
     container.addEventListener('keydown', handleKeyDown);
 
-    // Right-click paste
-    const handleContextMenu = (e: MouseEvent) => {
+    // Right-click paste — bind directly on xterm's internal textarea for reliable capture
+    const handleContextMenu = (e: Event) => {
       e.preventDefault();
-      navigator.clipboard.readText().then((text) => {
-        if (text) window.api.ssh.write(sessionId, text);
-      });
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      const text = window.api.clipboard.readText();
+      if (text) {
+        window.api.ssh.write(sessionId, text);
+        terminal.focus();
+      }
     };
-    container.addEventListener('contextmenu', handleContextMenu);
+    // xterm renders a textarea inside its element for input capture
+    const xtermTextarea = terminal.element?.querySelector('textarea');
+    const xtermScreen = terminal.element?.querySelector('.xterm-screen');
+    if (xtermTextarea) xtermTextarea.addEventListener('contextmenu', handleContextMenu, true);
+    if (xtermScreen) xtermScreen.addEventListener('contextmenu', handleContextMenu, true);
+    if (terminal.element) terminal.element.addEventListener('contextmenu', handleContextMenu, true);
+    container.addEventListener('contextmenu', handleContextMenu, true);
 
     return () => {
       resizeObserver.disconnect();
       container.removeEventListener('keydown', handleKeyDown);
-      container.removeEventListener('contextmenu', handleContextMenu);
+      if (xtermTextarea) xtermTextarea.removeEventListener('contextmenu', handleContextMenu, true);
+      if (xtermScreen) xtermScreen.removeEventListener('contextmenu', handleContextMenu, true);
+      if (terminal.element) terminal.element.removeEventListener('contextmenu', handleContextMenu, true);
+      container.removeEventListener('contextmenu', handleContextMenu, true);
     };
   }, [sessionId, appTheme, gutterVisible]);
 

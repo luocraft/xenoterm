@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useT } from '../i18n';
 
 interface TerminalSettingsProps {
   onClose: () => void;
@@ -22,6 +23,7 @@ const COLOR_SCHEMES = [
 ];
 
 export default function TerminalSettings({ onClose }: TerminalSettingsProps) {
+  const t = useT();
   const [fontFamily, setFontFamily] = useState(FONT_OPTIONS[0]);
   const [fontSize, setFontSize] = useState(14);
   const [colorScheme, setColorScheme] = useState('default');
@@ -54,14 +56,14 @@ export default function TerminalSettings({ onClose }: TerminalSettingsProps) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-4 flex justify-between items-center" style={{ borderBottom: '1px solid var(--color-border)' }}>
-          <h2 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>Terminal Settings</h2>
+          <h2 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>{t('termSettings.title')}</h2>
           <button onClick={onClose} className="text-lg" style={{ color: 'var(--color-text-muted)' }}>×</button>
         </div>
 
         <div className="p-4 space-y-4">
           {/* Font family */}
           <div>
-            <label className="block text-[10px] mb-1 uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>Font</label>
+            <label className="block text-[10px] mb-1 uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>{t('termSettings.font')}</label>
             <select className={inputClass} style={inputStyle} value={fontFamily} onChange={(e) => setFontFamily(e.target.value)}>
               {FONT_OPTIONS.map((f) => (
                 <option key={f} value={f}>{f.split("'")[1] || f}</option>
@@ -71,7 +73,7 @@ export default function TerminalSettings({ onClose }: TerminalSettingsProps) {
 
           {/* Font size */}
           <div>
-            <label className="block text-[10px] mb-1 uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>Size</label>
+            <label className="block text-[10px] mb-1 uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>{t('termSettings.size')}</label>
             <div className="flex gap-1 flex-wrap">
               {FONT_SIZE_OPTIONS.map((s) => (
                 <button
@@ -92,7 +94,7 @@ export default function TerminalSettings({ onClose }: TerminalSettingsProps) {
 
           {/* Color scheme */}
           <div>
-            <label className="block text-[10px] mb-1 uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>Color Scheme</label>
+            <label className="block text-[10px] mb-1 uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>{t('termSettings.colorScheme')}</label>
             <select className={inputClass} style={inputStyle} value={colorScheme} onChange={(e) => setColorScheme(e.target.value)}>
               {COLOR_SCHEMES.map((c) => (
                 <option key={c.value} value={c.value}>{c.name}</option>
@@ -116,11 +118,11 @@ export default function TerminalSettings({ onClose }: TerminalSettingsProps) {
             <button onClick={onClose}
               className="px-3 py-1.5 text-xs rounded-lg transition-colors"
               style={{ backgroundColor: 'var(--color-input-bg)', color: 'var(--color-text-secondary)' }}>
-              Cancel
+              {t('common.cancel')}
             </button>
             <button onClick={handleSave}
               className="px-4 py-1.5 text-xs rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 transition-opacity">
-              Save
+              {t('common.save')}
             </button>
           </div>
         </div>

@@ -1,0 +1,17 @@
+VERSION ""
+
+NS_ :
+
+BS_:
+
+BU_: ECU1 ECU2
+
+BO_ 291 EngineData: 8 ECU1
+ SG_ EngSpeed : 0|16@1+ (0.1,0) [0|8000] "rpm" ECU2
+ SG_ EngTemp : 16|8@1+ (1,-40) [-40|150] "degC" ECU2
+ SG_ IdleRunning : 24|1@1+ (1,0) [0|1] "" ECU2
+
+BO_ 512 BrakeData: 4 ECU2
+ SG_ BrakePedal : 0|8@1+ (0.4,0) [0|100] "%" ECU1
+ SG_ BrakeForce : 8|16@1- (0.01,0) [-300|300] "Nm" ECU1
+

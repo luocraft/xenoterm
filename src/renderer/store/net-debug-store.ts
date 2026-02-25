@@ -1,6 +1,15 @@
 import { create } from 'zustand';
 import type { NetSession, NetProtocol, NetMessage, NetDataEncoding } from '../../shared/types';
 
+export interface SendTemplate {
+  id: string;
+  name: string;
+  data: string;
+  encoding: NetDataEncoding;
+  intervalMs: number;
+  enabled: boolean; // timer running
+}
+
 export interface SessionUIState {
   input: string;
   encoding: NetDataEncoding;
@@ -30,14 +39,19 @@ const activeRecordings = new Map<string, string>();
 
 export function getTimerHandles() { return timerHandles; }
 
+/** Timer handles for template timers — keyed by templateId */
+const templateTimerHandles = new Map<string, ReturnType<typeof setInterval>>();
+
 export interface NetDebugStore {
   sessions: NetSession[];
   activeSessionId: string | null;
   messages: Map<string, NetMessage[]>;
   sessionUI: Map<string, SessionUIState>;
+  sendTemplates: Map<string, SendTemplate[]>; // sessionId -> templates
 
   createSession: (protocol: NetProtocol, host: string, port: number, localPort?: number) => Promise<void>;
   closeSession: (sessionId: string) => void;
+  reopenSession: (sessionId: string) => Promise<void>;
   removeSession: (sessionId: string) => void;
   setActiveSession: (sessionId: string | null) => void;
   sendData: (sessionId: string, data: string, encoding: NetDataEncoding, remoteAddress?: string) => void;
@@ -47,6 +61,11 @@ export interface NetDebugStore {
   stopTimer: (sessionId: string) => void;
   startRecording: (sessionId: string, filePath: string) => Promise<void>;
   stopRecording: (sessionId: string) => Promise<void>;
+  addTemplate: (sessionId: string) => void;
+  removeTemplate: (sessionId: string, templateId: string) => void;
+  updateTemplate: (sessionId: string, templateId: string, patch: Partial<SendTemplate>) => void;
+  sendTemplate: (sessionId: string, templateId: string) => void;
+  toggleTemplateTimer: (sessionId: string, templateId: string) => void;
 }
 
 function hexEncode(str: string): string {
@@ -80,6 +99,7 @@ export const useNetDebugStore = create<NetDebugStore>((set, get) => ({
   activeSessionId: null,
   messages: new Map(),
   sessionUI: new Map(),
+  sendTemplates: new Map(),
 
   createSession: async (protocol, host, port, localPort) => {
     try {
@@ -154,6 +174,83 @@ export const useNetDebugStore = create<NetDebugStore>((set, get) => ({
     }));
   },
 
+  reopenSession: async (sessionId) => {
+    const oldSession = get().sessions.find((s) => s.id === sessionId);
+    if (!oldSession) return;
+    try {
+      const newSession = await window.api.net.create(oldSession.protocol, oldSession.host, oldSession.port, oldSession.localPort);
+      // Migrate state maps from old ID to new ID
+      set((state) => {
+        const msgs = new Map(state.messages);
+        const oldMsgs = msgs.get(sessionId) || [];
+        msgs.delete(sessionId);
+        msgs.set(newSession.id, oldMsgs);
+        const ui = new Map(state.sessionUI);
+        const oldUI = ui.get(sessionId) || defaultUIState();
+        ui.delete(sessionId);
+        ui.set(newSession.id, { ...oldUI, timerRunning: false, recording: false });
+        const st = new Map(state.sendTemplates);
+        const oldTpls = st.get(sessionId) || [];
+        st.delete(sessionId);
+        st.set(newSession.id, oldTpls);
+        return {
+          sessions: state.sessions.map((s) => s.id === sessionId ? newSession : s),
+          activeSessionId: state.activeSessionId === sessionId ? newSession.id : state.activeSessionId,
+          messages: msgs,
+          sessionUI: ui,
+          sendTemplates: st,
+        };
+      });
+
+      // Re-register event listeners
+      window.api.net.onData(newSession.id, (hexData, remote) => {
+        const msg: NetMessage = {
+          id: crypto.randomUUID(),
+          sessionId: newSession.id,
+          direction: 'recv',
+          data: hexData,
+          encoding: 'hex',
+          timestamp: Date.now(),
+          remoteAddress: remote,
+        };
+        writeToRecording(newSession.id, msg);
+        set((state) => {
+          const msgs = new Map(state.messages);
+          const list = [...(msgs.get(newSession.id) || []), msg];
+          msgs.set(newSession.id, list.slice(-500));
+          return { messages: msgs };
+        });
+      });
+
+      window.api.net.onClose(newSession.id, () => {
+        set((state) => ({
+          sessions: state.sessions.map((s) =>
+            s.id === newSession.id ? { ...s, status: 'closed' as const } : s
+          ),
+        }));
+      });
+
+      window.api.net.onError(newSession.id, (error) => {
+        set((state) => ({
+          sessions: state.sessions.map((s) =>
+            s.id === newSession.id ? { ...s, status: 'error' as const, error } : s
+          ),
+        }));
+      });
+
+      window.api.net.onClients(newSession.id, (clients) => {
+        set((state) => ({
+          sessions: state.sessions.map((s) =>
+            s.id === newSession.id ? { ...s, clients } : s
+          ),
+        }));
+      });
+    } catch (err) {
+      console.error('Failed to reopen net session:', err);
+      throw err;
+    }
+  },
+
   removeSession: (sessionId) => {
     const session = get().sessions.find((s) => s.id === sessionId);
     if (session && session.status !== 'closed') {
@@ -165,15 +262,25 @@ export const useNetDebugStore = create<NetDebugStore>((set, get) => ({
     // Stop recording if active
     const recId = activeRecordings.get(sessionId);
     if (recId) { window.api.recording.stop(recId); activeRecordings.delete(sessionId); }
+    // Stop all template timers
+    const tpls = get().sendTemplates.get(sessionId) || [];
+    for (const tpl of tpls) {
+      const key = `${sessionId}:${tpl.id}`;
+      const th = templateTimerHandles.get(key);
+      if (th) { clearInterval(th); templateTimerHandles.delete(key); }
+    }
     set((state) => {
       const msgs = new Map(state.messages);
       msgs.delete(sessionId);
       const ui = new Map(state.sessionUI);
       ui.delete(sessionId);
+      const st = new Map(state.sendTemplates);
+      st.delete(sessionId);
       return {
         sessions: state.sessions.filter((s) => s.id !== sessionId),
         messages: msgs,
         sessionUI: ui,
+        sendTemplates: st,
         activeSessionId: state.activeSessionId === sessionId
           ? (state.sessions.find((s) => s.id !== sessionId)?.id || null)
           : state.activeSessionId,
@@ -279,6 +386,84 @@ export const useNetDebugStore = create<NetDebugStore>((set, get) => ({
       activeRecordings.delete(sessionId);
     }
     get().updateSessionUI(sessionId, { recording: false });
+  },
+
+  addTemplate: (sessionId) => {
+    const tpl: SendTemplate = {
+      id: crypto.randomUUID(),
+      name: '',
+      data: '',
+      encoding: 'utf8',
+      intervalMs: 1000,
+      enabled: false,
+    };
+    set((state) => {
+      const m = new Map(state.sendTemplates);
+      m.set(sessionId, [...(m.get(sessionId) || []), tpl]);
+      return { sendTemplates: m };
+    });
+  },
+
+  removeTemplate: (sessionId, templateId) => {
+    // Stop timer if running
+    const key = `${sessionId}:${templateId}`;
+    const h = templateTimerHandles.get(key);
+    if (h) { clearInterval(h); templateTimerHandles.delete(key); }
+    set((state) => {
+      const m = new Map(state.sendTemplates);
+      m.set(sessionId, (m.get(sessionId) || []).filter((t) => t.id !== templateId));
+      return { sendTemplates: m };
+    });
+  },
+
+  updateTemplate: (sessionId, templateId, patch) => {
+    set((state) => {
+      const m = new Map(state.sendTemplates);
+      m.set(sessionId, (m.get(sessionId) || []).map((t) =>
+        t.id === templateId ? { ...t, ...patch } : t
+      ));
+      return { sendTemplates: m };
+    });
+  },
+
+  sendTemplate: (sessionId, templateId) => {
+    const tpls = get().sendTemplates.get(sessionId) || [];
+    const tpl = tpls.find((t) => t.id === templateId);
+    if (!tpl || !tpl.data.trim()) return;
+    const session = get().sessions.find((s) => s.id === sessionId);
+    if (!session) return;
+    const ui = get().sessionUI.get(sessionId);
+    const remote = session.protocol === 'tcp-server' && ui?.targetClient ? ui.targetClient : undefined;
+    get().sendData(sessionId, tpl.data, tpl.encoding, remote);
+  },
+
+  toggleTemplateTimer: (sessionId, templateId) => {
+    const key = `${sessionId}:${templateId}`;
+    const existing = templateTimerHandles.get(key);
+    if (existing) {
+      clearInterval(existing);
+      templateTimerHandles.delete(key);
+      get().updateTemplate(sessionId, templateId, { enabled: false });
+      return;
+    }
+    const tpls = get().sendTemplates.get(sessionId) || [];
+    const tpl = tpls.find((t) => t.id === templateId);
+    if (!tpl || !tpl.data.trim() || tpl.intervalMs < 10) return;
+    // Send immediately
+    get().sendTemplate(sessionId, templateId);
+    const handle = setInterval(() => {
+      const st = get();
+      const s = st.sessions.find((ss) => ss.id === sessionId);
+      if (!s || (s.status !== 'connected' && s.status !== 'listening')) {
+        clearInterval(templateTimerHandles.get(key)!);
+        templateTimerHandles.delete(key);
+        get().updateTemplate(sessionId, templateId, { enabled: false });
+        return;
+      }
+      get().sendTemplate(sessionId, templateId);
+    }, tpl.intervalMs);
+    templateTimerHandles.set(key, handle);
+    get().updateTemplate(sessionId, templateId, { enabled: true });
   },
 }));
 

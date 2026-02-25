@@ -1,5 +1,5 @@
 import type { Client, SFTPWrapper } from 'ssh2';
-import { createReadStream, createWriteStream, statSync, readdirSync } from 'fs';
+import { readdirSync, mkdirSync, existsSync, statSync } from 'fs';
 import { join, basename, posix } from 'path';
 import type { FileEntry, TransferProgress } from '../../shared/types';
 import {
@@ -8,21 +8,32 @@ import {
 } from './sftp-utils';
 
 export class SFTPService {
-  private queue = new TransferQueue();
+  queue = new TransferQueue();
   private progressCallbacks: Map<string, Array<(p: TransferProgress) => void>> = new Map();
   private globalProgressCallbacks: Array<(p: TransferProgress) => void> = [];
+  /** Cache SFTP sessions per Client to avoid repeated handshakes */
+  private sftpCache = new WeakMap<Client, SFTPWrapper>();
 
-  private _getSFTP(client: Client): Promise<SFTPWrapper> {
+  getSFTP(client: Client): Promise<SFTPWrapper> {
+    const cached = this.sftpCache.get(client);
+    if (cached) return Promise.resolve(cached);
+
     return new Promise((resolve, reject) => {
       client.sftp((err, sftp) => {
-        if (err) reject(new Error(`SFTP session failed: ${err.message}`));
-        else resolve(sftp);
+        if (err) {
+          reject(new Error(`SFTP session failed: ${err.message}`));
+        } else {
+          this.sftpCache.set(client, sftp);
+          sftp.on('close', () => this.sftpCache.delete(client));
+          sftp.on('end', () => this.sftpCache.delete(client));
+          resolve(sftp);
+        }
       });
     });
   }
 
   async listDirectory(client: Client, remotePath: string): Promise<FileEntry[]> {
-    const sftp = await this._getSFTP(client);
+    const sftp = await this.getSFTP(client);
     return new Promise((resolve, reject) => {
       sftp.readdir(remotePath, (err, list) => {
         if (err) {
@@ -42,57 +53,64 @@ export class SFTPService {
     });
   }
 
+  /**
+   * Upload using fastPut — parallel reads for much faster throughput.
+   */
   async upload(
     client: Client,
     localPath: string,
     remotePath: string
   ): Promise<TransferProgress> {
-    const sftp = await this._getSFTP(client);
+    const sftp = await this.getSFTP(client);
     const stats = statSync(localPath);
     const progress = createTransferProgress(basename(localPath), 'upload', stats.size);
     this.queue.addTransfer(progress);
 
+    progress.status = 'transferring';
+    this.emitProgress(progress);
+
+    const startTime = Date.now();
+    let lastEmit = 0;
+
     return new Promise((resolve, reject) => {
-      progress.status = 'transferring';
-      this._emitProgress(progress);
-
-      const readStream = createReadStream(localPath);
-      const writeStream = sftp.createWriteStream(remotePath);
-      let transferred = 0;
-      const startTime = Date.now();
-
-      readStream.on('data', (chunk: Buffer) => {
-        transferred += chunk.length;
-        progress.bytesTransferred = transferred;
-        const elapsed = (Date.now() - startTime) / 1000;
-        progress.speed = elapsed > 0 ? transferred / elapsed : 0;
-        this._emitProgress(progress);
+      sftp.fastPut(localPath, remotePath, {
+        concurrency: 25,
+        chunkSize: 128 * 1024,
+        step: (transferred: number, _chunk: number, total: number) => {
+          progress.bytesTransferred = transferred;
+          const now = Date.now();
+          if (now - lastEmit >= 200) {
+            lastEmit = now;
+            const elapsed = (now - startTime) / 1000;
+            progress.speed = elapsed > 0 ? transferred / elapsed : 0;
+            this.emitProgress(progress);
+          }
+        }
+      }, (err) => {
+        if (err) {
+          progress.status = 'failed';
+          progress.error = err.message;
+          this.emitProgress(progress);
+          reject(new Error(`Upload failed: ${err.message}`));
+        } else {
+          progress.status = 'completed';
+          progress.bytesTransferred = stats.size;
+          this.emitProgress(progress);
+          resolve(progress);
+        }
       });
-
-      writeStream.on('close', () => {
-        progress.status = 'completed';
-        progress.bytesTransferred = stats.size;
-        this._emitProgress(progress);
-        resolve(progress);
-      });
-
-      writeStream.on('error', (err: Error) => {
-        progress.status = 'failed';
-        progress.error = err.message;
-        this._emitProgress(progress);
-        reject(new Error(`Upload failed: ${err.message}`));
-      });
-
-      readStream.pipe(writeStream);
     });
   }
 
+  /**
+   * Download using fastGet — parallel reads for much faster throughput.
+   */
   async download(
     client: Client,
     remotePath: string,
     localPath: string
   ): Promise<TransferProgress> {
-    const sftp = await this._getSFTP(client);
+    const sftp = await this.getSFTP(client);
 
     const remoteStats = await new Promise<{ size: number }>((resolve, reject) => {
       sftp.stat(remotePath, (err, stats) => {
@@ -104,38 +122,39 @@ export class SFTPService {
     const progress = createTransferProgress(basename(remotePath), 'download', remoteStats.size);
     this.queue.addTransfer(progress);
 
+    progress.status = 'transferring';
+    this.emitProgress(progress);
+
+    const startTime = Date.now();
+    let lastEmit = 0;
+
     return new Promise((resolve, reject) => {
-      progress.status = 'transferring';
-      this._emitProgress(progress);
-
-      const readStream = sftp.createReadStream(remotePath);
-      const writeStream = createWriteStream(localPath);
-      let transferred = 0;
-      const startTime = Date.now();
-
-      readStream.on('data', (chunk: Buffer) => {
-        transferred += chunk.length;
-        progress.bytesTransferred = transferred;
-        const elapsed = (Date.now() - startTime) / 1000;
-        progress.speed = elapsed > 0 ? transferred / elapsed : 0;
-        this._emitProgress(progress);
+      sftp.fastGet(remotePath, localPath, {
+        concurrency: 25,
+        chunkSize: 128 * 1024,
+        step: (transferred: number, _chunk: number, total: number) => {
+          progress.bytesTransferred = transferred;
+          const now = Date.now();
+          if (now - lastEmit >= 200) {
+            lastEmit = now;
+            const elapsed = (now - startTime) / 1000;
+            progress.speed = elapsed > 0 ? transferred / elapsed : 0;
+            this.emitProgress(progress);
+          }
+        }
+      }, (err) => {
+        if (err) {
+          progress.status = 'failed';
+          progress.error = err.message;
+          this.emitProgress(progress);
+          reject(new Error(`Download failed: ${err.message}`));
+        } else {
+          progress.status = 'completed';
+          progress.bytesTransferred = remoteStats.size;
+          this.emitProgress(progress);
+          resolve(progress);
+        }
       });
-
-      writeStream.on('close', () => {
-        progress.status = 'completed';
-        progress.bytesTransferred = remoteStats.size;
-        this._emitProgress(progress);
-        resolve(progress);
-      });
-
-      readStream.on('error', (err: Error) => {
-        progress.status = 'failed';
-        progress.error = err.message;
-        this._emitProgress(progress);
-        reject(new Error(`Download failed: ${err.message}`));
-      });
-
-      readStream.pipe(writeStream);
     });
   }
 
@@ -144,12 +163,11 @@ export class SFTPService {
     localPath: string,
     remotePath: string
   ): Promise<TransferProgress[]> {
-    const sftp = await this._getSFTP(client);
+    const sftp = await this.getSFTP(client);
     const results: TransferProgress[] = [];
 
-    // Ensure remote directory exists
     await new Promise<void>((resolve) => {
-      sftp.mkdir(remotePath, () => resolve()); // ignore error if exists
+      sftp.mkdir(remotePath, () => resolve());
     });
 
     const items = readdirSync(localPath, { withFileTypes: true });
@@ -174,7 +192,6 @@ export class SFTPService {
     remotePath: string,
     localPath: string
   ): Promise<TransferProgress[]> {
-    const { mkdirSync, existsSync } = await import('fs');
     if (!existsSync(localPath)) {
       mkdirSync(localPath, { recursive: true });
     }
@@ -198,11 +215,75 @@ export class SFTPService {
     return results;
   }
 
+  async deleteRemote(client: Client, remotePath: string): Promise<void> {
+    const sftp = await this.getSFTP(client);
+    // Check if it's a directory
+    const stats = await new Promise<any>((resolve, reject) => {
+      sftp.stat(remotePath, (err, s) => err ? reject(err) : resolve(s));
+    });
+    if ((stats.mode & 0o40000) !== 0) {
+      // Recursively delete directory
+      const entries = await this.listDirectory(client, remotePath);
+      for (const entry of entries) {
+        await this.deleteRemote(client, entry.path);
+      }
+      await new Promise<void>((resolve, reject) => {
+        sftp.rmdir(remotePath, (err) => err ? reject(err) : resolve());
+      });
+    } else {
+      await new Promise<void>((resolve, reject) => {
+        sftp.unlink(remotePath, (err) => err ? reject(err) : resolve());
+      });
+    }
+  }
+
+  async renameRemote(client: Client, oldPath: string, newPath: string): Promise<void> {
+    const sftp = await this.getSFTP(client);
+    await new Promise<void>((resolve, reject) => {
+      sftp.rename(oldPath, newPath, (err) => err ? reject(err) : resolve());
+    });
+  }
+
+  async mkdirRemote(client: Client, remotePath: string): Promise<void> {
+    const sftp = await this.getSFTP(client);
+    await new Promise<void>((resolve, reject) => {
+      sftp.mkdir(remotePath, (err) => err ? reject(err) : resolve());
+    });
+  }
+
+  async chmodRemote(client: Client, remotePath: string, mode: number): Promise<void> {
+    const sftp = await this.getSFTP(client);
+    await new Promise<void>((resolve, reject) => {
+      sftp.chmod(remotePath, mode, (err) => err ? reject(err) : resolve());
+    });
+  }
+
+  async readRemoteFile(client: Client, remotePath: string): Promise<string> {
+    const sftp = await this.getSFTP(client);
+    return new Promise<string>((resolve, reject) => {
+      const chunks: Buffer[] = [];
+      const stream = sftp.createReadStream(remotePath, { encoding: undefined });
+      stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+      stream.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
+      stream.on('error', (err) => reject(err));
+    });
+  }
+
+  async writeRemoteFile(client: Client, remotePath: string, content: string): Promise<void> {
+    const sftp = await this.getSFTP(client);
+    return new Promise<void>((resolve, reject) => {
+      const stream = sftp.createWriteStream(remotePath);
+      stream.on('close', () => resolve());
+      stream.on('error', (err) => reject(err));
+      stream.end(Buffer.from(content, 'utf-8'));
+    });
+  }
+
   cancelTransfer(transferId: string): void {
     this.queue.cancelTransfer(transferId);
     const transfer = this.queue.getTransfer(transferId);
     if (transfer) {
-      this._emitProgress(transfer);
+      this.emitProgress(transfer);
     }
   }
 
@@ -225,7 +306,7 @@ export class SFTPService {
     this.globalProgressCallbacks.push(callback);
   }
 
-  private _emitProgress(progress: TransferProgress): void {
+  emitProgress(progress: TransferProgress): void {
     const callbacks = this.progressCallbacks.get(progress.transferId) || [];
     callbacks.forEach((cb) => cb(progress));
     this.globalProgressCallbacks.forEach((cb) => cb(progress));
