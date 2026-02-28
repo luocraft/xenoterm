@@ -5,12 +5,20 @@ import type { SerialConfig, SerialSession, SerialPortInfo } from '../../shared/t
 // Lazy-load serialport to avoid vite hoisting the require to the top of the bundle.
 // The module path fix in index.ts must run first.
 let _SerialPort: typeof import('serialport').SerialPort | null = null;
-function getSerialPort(): typeof import('serialport').SerialPort {
+let _serialportUnavailable = false;
+function getSerialPort(): typeof import('serialport').SerialPort | null {
+  if (_serialportUnavailable) return null;
   if (!_SerialPort) {
-    // Use Function constructor to prevent vite from analyzing/hoisting this require
-    const dynamicRequire = new Function('mod', 'return require(mod)') as (mod: string) => any;
-    const sp = dynamicRequire('serialport');
-    _SerialPort = sp.SerialPort;
+    try {
+      // serialport is externalized by electron-vite, so require() works at runtime.
+      // Use eval to prevent vite from analyzing/transforming this require call.
+      const sp = eval("require('serialport')");
+      _SerialPort = sp.SerialPort;
+    } catch (err) {
+      console.warn('[Serial] serialport module not available:', (err as Error).message);
+      _serialportUnavailable = true;
+      return null;
+    }
   }
   return _SerialPort!;
 }
@@ -94,6 +102,7 @@ export class SerialService {
 
   async listPorts(): Promise<SerialPortInfo[]> {
     const SP = getSerialPort();
+    if (!SP) return [];
     const ports = await SP.list();
     return ports.map((p) => ({
       path: p.path,
@@ -158,7 +167,13 @@ export class SerialService {
         rts: true,
       };
 
-      const port = new (getSerialPort())({
+      const SP = getSerialPort();
+      if (!SP) {
+        reject(new Error('serialport module is not available'));
+        return;
+      }
+
+      const port = new SP({
         path: config.path,
         baudRate: config.baudRate,
         dataBits: config.dataBits,

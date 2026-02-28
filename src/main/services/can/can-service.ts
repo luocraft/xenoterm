@@ -8,6 +8,9 @@ import { GcCanDriver } from './can-driver-gc';
 import { GcCanFdDriver } from './can-driver-gc-fd';
 import type { CanFdOpenConfig } from './can-driver-gc-fd';
 import { VirtualCanDriver } from './can-driver-virtual';
+import { PeakCanDriver } from './can-driver-peak';
+import { KvaserCanDriver } from './can-driver-kvaser';
+import { VectorCanDriver } from './can-driver-vector';
 import { parseDbc, type DbcDatabase } from './dbc-parser';
 import { readFileSync } from 'fs';
 import { IsoTpTransport, type IsoTpConfig } from './iso-tp';
@@ -43,10 +46,16 @@ export class CanService {
     const gc = new GcCanDriver();
     const gcFd = new GcCanFdDriver();
     const virtual_ = new VirtualCanDriver();
+    const peak = new PeakCanDriver();
+    const kvaser = new KvaserCanDriver();
+    const vector = new VectorCanDriver();
     this.drivers.set(zlg.name, zlg);
     this.drivers.set(gc.name, gc);
     this.drivers.set(gcFd.name, gcFd);
     this.drivers.set(virtual_.name, virtual_);
+    this.drivers.set(peak.name, peak);
+    this.drivers.set(kvaser.name, kvaser);
+    this.drivers.set(vector.name, vector);
   }
 
   listDrivers(): { name: string; available: boolean }[] {

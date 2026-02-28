@@ -30,6 +30,9 @@ export interface AppStore {
   // Command history: global list of commands (persisted, max 100)
   commandHistory: { cmd: string; ts: number; hostName?: string }[];
 
+  // Remote CWD tracking per session (detected from terminal prompt)
+  sessionCwdMap: Record<string, string>;
+
   // Actions — Connection
   loadHosts: () => Promise<void>;
   addHost: (entry: Omit<HostEntry, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
@@ -60,6 +63,7 @@ export interface AppStore {
   loadAppConfig: () => Promise<void>;
   addCommand: (sessionId: string, cmd: string) => void;
   loadCommandHistory: () => Promise<void>;
+  setSessionCwd: (sessionId: string, cwd: string) => void;
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
@@ -77,6 +81,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   commandHistoryVisible: false,
   timestampGutterVisible: false,
   commandHistory: [],
+  sessionCwdMap: {},
 
   // Connection actions
   loadHosts: async () => {
@@ -319,5 +324,11 @@ export const useAppStore = create<AppStore>((set, get) => ({
     } catch (err) {
       console.error('Failed to load app config:', err);
     }
+  },
+
+  setSessionCwd: (sessionId, cwd) => {
+    set((state) => ({
+      sessionCwdMap: { ...state.sessionCwdMap, [sessionId]: cwd }
+    }));
   }
 }));

@@ -48,20 +48,20 @@ export default function Sidebar({
   onEditConnection,
   onImportExport,
   onConnect,
-  onNetDebug,
-  onSerialDebug,
-  onCanDebug,
-  onEthercatDebug,
+  onNetPanel,
+  onSerialPanel,
+  onCanPanel,
+  onEthercatPanel,
   onLicenseClick
 }: {
   onNewConnection: () => void;
   onEditConnection: (host: HostEntry) => void;
   onImportExport: () => void;
   onConnect?: (hostId: string) => void;
-  onNetDebug?: () => void;
-  onSerialDebug?: () => void;
-  onCanDebug?: () => void;
-  onEthercatDebug?: () => void;
+  onNetPanel?: () => void;
+  onSerialPanel?: () => void;
+  onCanPanel?: () => void;
+  onEthercatPanel?: () => void;
   onLicenseClick?: () => void;
 }) {
   const hosts = useAppStore((s) => s.hosts);
@@ -220,22 +220,32 @@ export default function Sidebar({
         style={{ borderTop: '1px solid var(--color-border)' }}
       >
         <div className="flex items-center gap-0.5">
-          {[
-            { label: t('sidebar.importExport'), text: '📦', onClick: onImportExport },
-            { label: t('sidebar.network'), text: '🔌', onClick: () => onNetDebug?.() },
-            { label: t('sidebar.serial'), text: '⚡', onClick: () => onSerialDebug?.() },
-            { label: t('sidebar.canbus'), text: '🚗', onClick: () => onCanDebug?.() },
-            { label: t('sidebar.ethercat'), text: '⚙️', onClick: () => onEthercatDebug?.() },
-          ].map((item) => (
-            <button
-              key={item.label}
-              onClick={item.onClick}
-              className="flex-1 h-7 rounded-md flex items-center justify-center text-[11px] transition-colors hover:bg-[var(--color-hover-bg)]"
-              title={item.label}
-            >
-              {item.text}
-            </button>
-          ))}
+          <button
+            key="import-export"
+            onClick={onImportExport}
+            className="h-7 w-7 rounded-md flex items-center justify-center text-[11px] transition-colors hover:bg-[var(--color-hover-bg)]"
+            title={t('sidebar.importExport')}
+          >📦</button>
+          <button
+            onClick={() => onNetPanel?.()}
+            className="flex-1 h-7 rounded-md flex items-center justify-center text-[11px] transition-colors hover:bg-[var(--color-hover-bg)]"
+            title={t('sidebar.network')}
+          >🔌</button>
+          <button
+            onClick={() => onSerialPanel?.()}
+            className="flex-1 h-7 rounded-md flex items-center justify-center text-[11px] transition-colors hover:bg-[var(--color-hover-bg)]"
+            title={t('sidebar.serial')}
+          >⚡</button>
+          <button
+            onClick={() => onCanPanel?.()}
+            className="flex-1 h-7 rounded-md flex items-center justify-center text-[11px] transition-colors hover:bg-[var(--color-hover-bg)]"
+            title={t('sidebar.canbus')}
+          >🚗</button>
+          <button
+            onClick={() => onEthercatPanel?.()}
+            className="flex-1 h-7 rounded-md flex items-center justify-center text-[11px] transition-colors hover:bg-[var(--color-hover-bg)]"
+            title={t('sidebar.ethercat')}
+          >⚙️</button>
         </div>
         <LicenseStatusBar onClick={() => onLicenseClick?.()} />
       </div>

@@ -116,7 +116,8 @@ export const useNetDebugStore = create<NetDebugStore>((set, get) => ({
       });
 
       // Listen for data
-      window.api.net.onData(session.id, (hexData, remote) => {
+      window.api.net.onData((sid, hexData, remote) => {
+        if (sid !== session.id) return;
         const msg: NetMessage = {
           id: crypto.randomUUID(),
           sessionId: session.id,
@@ -136,7 +137,8 @@ export const useNetDebugStore = create<NetDebugStore>((set, get) => ({
         });
       });
 
-      window.api.net.onClose(session.id, () => {
+      window.api.net.onClose((sid) => {
+        if (sid !== session.id) return;
         set((state) => ({
           sessions: state.sessions.map((s) =>
             s.id === session.id ? { ...s, status: 'closed' as const } : s
@@ -144,7 +146,8 @@ export const useNetDebugStore = create<NetDebugStore>((set, get) => ({
         }));
       });
 
-      window.api.net.onError(session.id, (error) => {
+      window.api.net.onError((sid, error) => {
+        if (sid !== session.id) return;
         set((state) => ({
           sessions: state.sessions.map((s) =>
             s.id === session.id ? { ...s, status: 'error' as const, error } : s
@@ -152,7 +155,8 @@ export const useNetDebugStore = create<NetDebugStore>((set, get) => ({
         }));
       });
 
-      window.api.net.onClients(session.id, (clients) => {
+      window.api.net.onClients((sid, clients) => {
+        if (sid !== session.id) return;
         set((state) => ({
           sessions: state.sessions.map((s) =>
             s.id === session.id ? { ...s, clients } : s
@@ -203,7 +207,8 @@ export const useNetDebugStore = create<NetDebugStore>((set, get) => ({
       });
 
       // Re-register event listeners
-      window.api.net.onData(newSession.id, (hexData, remote) => {
+      window.api.net.onData((sid, hexData, remote) => {
+        if (sid !== newSession.id) return;
         const msg: NetMessage = {
           id: crypto.randomUUID(),
           sessionId: newSession.id,
@@ -222,7 +227,8 @@ export const useNetDebugStore = create<NetDebugStore>((set, get) => ({
         });
       });
 
-      window.api.net.onClose(newSession.id, () => {
+      window.api.net.onClose((sid) => {
+        if (sid !== newSession.id) return;
         set((state) => ({
           sessions: state.sessions.map((s) =>
             s.id === newSession.id ? { ...s, status: 'closed' as const } : s
@@ -230,7 +236,8 @@ export const useNetDebugStore = create<NetDebugStore>((set, get) => ({
         }));
       });
 
-      window.api.net.onError(newSession.id, (error) => {
+      window.api.net.onError((sid, error) => {
+        if (sid !== newSession.id) return;
         set((state) => ({
           sessions: state.sessions.map((s) =>
             s.id === newSession.id ? { ...s, status: 'error' as const, error } : s
@@ -238,7 +245,8 @@ export const useNetDebugStore = create<NetDebugStore>((set, get) => ({
         }));
       });
 
-      window.api.net.onClients(newSession.id, (clients) => {
+      window.api.net.onClients((sid, clients) => {
+        if (sid !== newSession.id) return;
         set((state) => ({
           sessions: state.sessions.map((s) =>
             s.id === newSession.id ? { ...s, clients } : s

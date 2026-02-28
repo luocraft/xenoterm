@@ -122,7 +122,8 @@ export class ConnectionManager {
     const group: ConnectionGroup = {
       id: randomUUID(),
       name: name.trim(),
-      parentId
+      parentId,
+      hostIds: []
     };
     const groups = this.store.getGroups();
     groups.push(group);
@@ -209,7 +210,8 @@ export class ConnectionManager {
         validGroups.push({
           id: g.id || randomUUID(),
           name: g.name.trim(),
-          parentId: g.parentId
+          parentId: g.parentId,
+          hostIds: g.hostIds || []
         });
       }
     }

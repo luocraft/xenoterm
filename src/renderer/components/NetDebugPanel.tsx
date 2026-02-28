@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useNetDebugStore, hexDecode } from '../store/net-debug-store';
+import type { NetProtocol, NetDataEncoding, NetMessage } from '../store/net-debug-store';
 import { useT } from '../i18n';
-import type { NetProtocol, NetDataEncoding, NetMessage } from '../../shared/types';
 
 function StatusDot({ status }: { status: string }) {
   const color =
@@ -160,17 +160,18 @@ function NetSendTemplatePanel({ sessionId }: { sessionId: string }) {
           <div className="text-[10px] text-center py-2" style={{ color: 'var(--color-text-dim)' }}>{t('tpl.empty')}</div>
         ) : (
           <div className="text-[11px] flex flex-col min-h-0">
-            <div className="flex items-center gap-1 px-2 py-0.5 text-[9px] flex-shrink-0" style={{ color: 'var(--color-text-dim)', borderBottom: '1px solid var(--color-border)' }}>
-              <span className="w-12"></span>
+            <div className="flex items-center gap-1.5 px-2 py-0.5 text-[9px] flex-shrink-0" style={{ color: 'var(--color-text-dim)', borderBottom: '1px solid var(--color-border)' }}>
+              <span className="w-6"></span>
+              <span className="w-6"></span>
               <span className="w-20">{t('tpl.name')}</span>
-              <span className="w-12">{t('tpl.encoding')}</span>
+              <span className="w-16">{t('tpl.encoding')}</span>
               <span className="flex-1">{t('tpl.data')}</span>
               <span className="w-16">{t('tpl.intervalMs')}</span>
               <span className="w-8"></span>
             </div>
             <div className="overflow-y-auto flex-1">
               {templates.map((tpl) => (
-                <div key={tpl.id} className="flex items-center gap-1 px-2 py-0.5 hover:bg-[var(--color-hover-bg)]">
+                <div key={tpl.id} className="flex items-center gap-1.5 px-2 py-0.5 hover:bg-[var(--color-hover-bg)]">
                   <button onClick={() => isActive && sendTpl(sessionId, tpl.id)}
                     className="w-6 text-center text-[10px]"
                     style={{ color: 'var(--color-text-secondary)', cursor: isActive ? 'pointer' : 'default' }}
@@ -183,7 +184,7 @@ function NetSendTemplatePanel({ sessionId }: { sessionId: string }) {
                   <input value={tpl.name} onChange={(e) => updateTemplate(sessionId, tpl.id, { name: e.target.value })}
                     placeholder="name" className="w-20 px-1 py-0.5 text-[10px] rounded" style={inputStyle} disabled={tpl.enabled} />
                   <select value={tpl.encoding} onChange={(e) => updateTemplate(sessionId, tpl.id, { encoding: e.target.value as NetDataEncoding })}
-                    className="w-12 px-0.5 py-0.5 text-[10px] rounded outline-none" style={inputStyle} disabled={tpl.enabled}>
+                    className="w-16 px-1 py-0.5 text-[10px] rounded outline-none" style={inputStyle} disabled={tpl.enabled}>
                     <option value="utf8">UTF8</option>
                     <option value="hex">HEX</option>
                   </select>

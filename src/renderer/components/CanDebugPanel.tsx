@@ -30,8 +30,8 @@ function ConnectionBar() {
   const isConnected = activeSession?.status === 'connected';
 
   const isFdDriver = driverName === 'GC-FD';
-  // Multi-channel device types: USBCAN-II(4), USBCAN-2E-U(33), USBCANFD(6), GC USBCAN-II(4)
-  const isMultiChannel = [4, 6, 33].includes(deviceType);
+  // Multi-channel device types: USBCAN-II(4), USBCAN-2E-U(33), USBCANFD(6), PEAK/Kvaser/Vector 2-CH(2)
+  const isMultiChannel = [2, 4, 6, 33].includes(deviceType);
   const baudRates = isFdDriver
     ? [125000, 250000, 500000, 800000, 1000000]
     : [5000, 10000, 20000, 50000, 100000, 125000, 250000, 500000, 800000, 1000000];
@@ -74,6 +74,8 @@ function ConnectionBar() {
       setDeviceType(4);
     } else if (name === 'ZLG') {
       setDeviceType(4);
+    } else if (name === 'PEAK' || name === 'Kvaser' || name === 'Vector') {
+      setDeviceType(1);
     }
   };
 
@@ -91,6 +93,9 @@ function ConnectionBar() {
         <option value="ZLG">{t('can.zlg')}</option>
         <option value="GC">{t('can.gc')}</option>
         <option value="GC-FD">{t('can.gcFd')}</option>
+        <option value="PEAK">{t('can.peak')}</option>
+        <option value="Kvaser">{t('can.kvaser')}</option>
+        <option value="Vector">{t('can.vector')}</option>
       </select>
       <select value={deviceType} onChange={(e) => setDeviceType(Number(e.target.value))}
         className="px-1.5 py-1 text-[11px] rounded" style={selectStyle} disabled={isConnected}>
@@ -100,6 +105,21 @@ function ConnectionBar() {
           <>
             <option value={3}>USBCAN-I</option>
             <option value={4}>USBCAN-II</option>
+          </>
+        ) : driverName === 'PEAK' ? (
+          <>
+            <option value={1}>PCAN-USB (1-CH)</option>
+            <option value={2}>PCAN-USB (2-CH)</option>
+          </>
+        ) : driverName === 'Kvaser' ? (
+          <>
+            <option value={1}>Kvaser USB (1-CH)</option>
+            <option value={2}>Kvaser USB (2-CH)</option>
+          </>
+        ) : driverName === 'Vector' ? (
+          <>
+            <option value={1}>Vector (1-CH)</option>
+            <option value={2}>Vector (2-CH)</option>
           </>
         ) : (
           <>

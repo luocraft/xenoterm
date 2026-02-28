@@ -6,17 +6,7 @@ import type {
   TransferProgress,
   AppConfig,
   ImportResult,
-  NetSession,
-  NetProtocol,
-  SerialConfig,
-  SerialSession,
-  SerialPortInfo
 } from '../shared/types';
-import type { CanFrame, CanDeviceType } from '../main/services/can/can-driver.interface';
-import type { DbcDatabase } from '../main/services/can/dbc-parser';
-import type { EcSession, EcSlaveInfo, SdoResult, ErrorCounters, PdoSignal, EmergencyMsg, FoeResult } from '../main/services/ethercat/types';
-import type { EsiDevice, OdEntry } from '../main/services/ethercat/esi-parser';
-
 const api = {
   ssh: {
     connect: (config: HostEntry, password?: string): Promise<SSHSession> =>
@@ -66,6 +56,10 @@ const api = {
       ipcRenderer.invoke('sftp:rename', sessionId, oldPath, newPath),
     mkdir: (sessionId: string, remotePath: string): Promise<void> =>
       ipcRenderer.invoke('sftp:mkdir', sessionId, remotePath),
+    uploadDir: (sessionId: string, localPath: string, remotePath: string): Promise<string[]> =>
+      ipcRenderer.invoke('sftp:uploadDir', sessionId, localPath, remotePath),
+    downloadDir: (sessionId: string, remotePath: string, localPath: string): Promise<string[]> =>
+      ipcRenderer.invoke('sftp:downloadDir', sessionId, remotePath, localPath),
     chmod: (sessionId: string, remotePath: string, mode: number): Promise<void> =>
       ipcRenderer.invoke('sftp:chmod', sessionId, remotePath, mode),
     readFile: (sessionId: string, remotePath: string): Promise<string> =>
@@ -110,11 +104,17 @@ const api = {
     listDirectory: (dirPath: string): Promise<FileEntry[]> =>
       ipcRenderer.invoke('local:listDirectory', dirPath),
     getHomePath: (): Promise<string> =>
-      ipcRenderer.invoke('local:getHomePath')
+      ipcRenderer.invoke('local:getHomePath'),
+    ensureXtDownload: (): Promise<string> =>
+      ipcRenderer.invoke('local:ensureXtDownload'),
+    isDirectory: (filePath: string): Promise<boolean> =>
+      ipcRenderer.invoke('local:isDirectory', filePath)
   },
   shell: {
     showItemInFolder: (fullPath: string): Promise<void> =>
       ipcRenderer.invoke('shell:showItemInFolder', fullPath),
+    openPath: (fullPath: string): Promise<string> =>
+      ipcRenderer.invoke('shell:openPath', fullPath),
   },
   theme: {
     updateTitlebar: (bgColor: string, symbolColor: string): void =>
@@ -140,55 +140,19 @@ const api = {
     stop: (recordingId: string): Promise<void> =>
       ipcRenderer.invoke('recording:stop', recordingId),
   },
-  net: {
-    create: (protocol: NetProtocol, host: string, port: number, localPort?: number): Promise<NetSession> =>
-      ipcRenderer.invoke('net:create', protocol, host, port, localPort),
-    close: (sessionId: string): Promise<void> =>
-      ipcRenderer.invoke('net:close', sessionId),
-    send: (sessionId: string, hexData: string, remoteAddress?: string): void =>
-      ipcRenderer.send('net:send', sessionId, hexData, remoteAddress),
-    onData: (sessionId: string, callback: (hexData: string, remote?: string) => void): (() => void) => {
-      const handler = (_event: Electron.IpcRendererEvent, sid: string, data: string, remote?: string) => {
-        if (sid === sessionId) callback(data, remote);
-      };
-      ipcRenderer.on('net:data', handler);
-      return () => ipcRenderer.removeListener('net:data', handler);
-    },
-    onClose: (sessionId: string, callback: () => void): (() => void) => {
-      const handler = (_event: Electron.IpcRendererEvent, sid: string) => {
-        if (sid === sessionId) callback();
-      };
-      ipcRenderer.on('net:close', handler);
-      return () => ipcRenderer.removeListener('net:close', handler);
-    },
-    onError: (sessionId: string, callback: (error: string) => void): (() => void) => {
-      const handler = (_event: Electron.IpcRendererEvent, sid: string, error: string) => {
-        if (sid === sessionId) callback(error);
-      };
-      ipcRenderer.on('net:error', handler);
-      return () => ipcRenderer.removeListener('net:error', handler);
-    },
-    onClients: (sessionId: string, callback: (clients: string[]) => void): (() => void) => {
-      const handler = (_event: Electron.IpcRendererEvent, sid: string, clients: string[]) => {
-        if (sid === sessionId) callback(clients);
-      };
-      ipcRenderer.on('net:clients', handler);
-      return () => ipcRenderer.removeListener('net:clients', handler);
-    }
-  },
   serial: {
-    list: (): Promise<SerialPortInfo[]> =>
+    list: (): Promise<any[]> =>
       ipcRenderer.invoke('serial:list'),
-    open: (config: SerialConfig): Promise<SerialSession> =>
+    open: (config: any): Promise<any> =>
       ipcRenderer.invoke('serial:open', config),
     close: (sessionId: string): Promise<void> =>
       ipcRenderer.invoke('serial:close', sessionId),
     write: (sessionId: string, hexData: string): void =>
       ipcRenderer.send('serial:write', sessionId, hexData),
-    setDTR: (sessionId: string, value: boolean): void =>
-      ipcRenderer.send('serial:setDTR', sessionId, value),
-    setRTS: (sessionId: string, value: boolean): void =>
-      ipcRenderer.send('serial:setRTS', sessionId, value),
+    setDTR: (sessionId: string, value: boolean): Promise<void> =>
+      ipcRenderer.invoke('serial:setDTR', sessionId, value),
+    setRTS: (sessionId: string, value: boolean): Promise<void> =>
+      ipcRenderer.invoke('serial:setRTS', sessionId, value),
     onData: (sessionId: string, callback: (hexData: string) => void): (() => void) => {
       const handler = (_event: Electron.IpcRendererEvent, sid: string, data: string) => {
         if (sid === sessionId) callback(data);
@@ -211,21 +175,53 @@ const api = {
       return () => ipcRenderer.removeListener('serial:error', handler);
     }
   },
+  net: {
+    create: (protocol: string, host: string, port: number, localPort?: number): Promise<any> =>
+      ipcRenderer.invoke('net:create', protocol, host, port, localPort),
+    close: (sessionId: string): Promise<void> =>
+      ipcRenderer.invoke('net:close', sessionId),
+    send: (sessionId: string, hexData: string, remoteAddress?: string): void =>
+      ipcRenderer.send('net:send', sessionId, hexData, remoteAddress),
+    onData: (callback: (sid: string, hexData: string, remote?: string) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, sid: string, data: string, remote?: string) => {
+        callback(sid, data, remote);
+      };
+      ipcRenderer.on('net:data', handler);
+      return () => ipcRenderer.removeListener('net:data', handler);
+    },
+    onClose: (callback: (sid: string) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, sid: string) => {
+        callback(sid);
+      };
+      ipcRenderer.on('net:close', handler);
+      return () => ipcRenderer.removeListener('net:close', handler);
+    },
+    onError: (callback: (sid: string, error: string) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, sid: string, error: string) => {
+        callback(sid, error);
+      };
+      ipcRenderer.on('net:error', handler);
+      return () => ipcRenderer.removeListener('net:error', handler);
+    },
+    onClients: (callback: (sid: string, clients: string[]) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, sid: string, clients: string[]) => {
+        callback(sid, clients);
+      };
+      ipcRenderer.on('net:clients', handler);
+      return () => ipcRenderer.removeListener('net:clients', handler);
+    }
+  },
   can: {
-    listDrivers: (): Promise<{ name: string; available: boolean }[]> =>
-      ipcRenderer.invoke('can:listDrivers'),
-    getDeviceTypes: (driverName: string): Promise<CanDeviceType[]> =>
-      ipcRenderer.invoke('can:getDeviceTypes', driverName),
-    open: (driverName: string, deviceType: number, deviceIndex: number, channel: number, baudRate: number, fdConfig?: { protocol?: number; mode?: number; dataBaudRate?: number; nonIso?: boolean; ch1BaudRate?: number; ch1DataBaudRate?: number }): Promise<{ id: string; driverName: string; deviceType: number; channel: number; baudRate: number; status: string } | { id: string; driverName: string; deviceType: number; channel: number; baudRate: number; status: string }[]> =>
+    open: (driverName: string, deviceType: number, deviceIndex: number, channel: number, baudRate: number, fdConfig?: any): Promise<any> =>
       ipcRenderer.invoke('can:open', driverName, deviceType, deviceIndex, channel, baudRate, fdConfig),
     close: (sessionId: string): Promise<void> =>
       ipcRenderer.invoke('can:close', sessionId),
-    send: (sessionId: string, frame: CanFrame): void =>
-      ipcRenderer.send('can:send', sessionId, frame),
-    parseDbc: (content: string): Promise<DbcDatabase> =>
+    send: (sessionId: string, frame: any): Promise<void> =>
+      ipcRenderer.invoke('can:send', sessionId, frame),
+    parseDbc: (content: string): Promise<any> =>
       ipcRenderer.invoke('can:parseDbc', content),
-    onData: (sessionId: string, callback: (frames: CanFrame[]) => void): (() => void) => {
-      const handler = (_event: Electron.IpcRendererEvent, sid: string, frames: CanFrame[]) => {
+    onData: (sessionId: string, callback: (frames: any[]) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, sid: string, frames: any[]) => {
         if (sid === sessionId) callback(frames);
       };
       ipcRenderer.on('can:data', handler);
@@ -238,15 +234,14 @@ const api = {
       ipcRenderer.on('can:error', handler);
       return () => ipcRenderer.removeListener('can:error', handler);
     },
-    // UDS
     udsRequest: (sessionId: string, txId: number, rxId: number, payload: number[]): Promise<any> =>
       ipcRenderer.invoke('can:udsRequest', sessionId, txId, rxId, payload),
-    udsStartTesterPresent: (sessionId: string, txId: number, rxId: number, intervalMs?: number): void =>
-      ipcRenderer.send('can:udsStartTesterPresent', sessionId, txId, rxId, intervalMs),
-    udsStopTesterPresent: (sessionId: string, txId: number, rxId: number): void =>
-      ipcRenderer.send('can:udsStopTesterPresent', sessionId, txId, rxId),
-    udsDestroy: (sessionId: string, txId: number, rxId: number): void =>
-      ipcRenderer.send('can:udsDestroy', sessionId, txId, rxId),
+    udsStartTesterPresent: (sessionId: string, txId: number, rxId: number, intervalMs?: number): Promise<void> =>
+      ipcRenderer.invoke('can:udsStartTesterPresent', sessionId, txId, rxId, intervalMs),
+    udsStopTesterPresent: (sessionId: string, txId: number, rxId: number): Promise<void> =>
+      ipcRenderer.invoke('can:udsStopTesterPresent', sessionId, txId, rxId),
+    udsDestroy: (sessionId: string, txId: number, rxId: number): Promise<void> =>
+      ipcRenderer.invoke('can:udsDestroy', sessionId, txId, rxId),
     onUdsLog: (sessionId: string, callback: (entry: any) => void): (() => void) => {
       const handler = (_event: Electron.IpcRendererEvent, sid: string, entry: any) => {
         if (sid === sessionId) callback(entry);
@@ -255,48 +250,48 @@ const api = {
       return () => ipcRenderer.removeListener('can:udsLog', handler);
     }
   },
-  ecat: {
+  ethercat: {
     isAvailable: (): Promise<boolean> =>
       ipcRenderer.invoke('ecat:isAvailable'),
-    listAdapters: (): Promise<{ name: string; description: string }[]> =>
+    listAdapters: (): Promise<any[]> =>
       ipcRenderer.invoke('ecat:listAdapters'),
-    connect: (adapter: string): Promise<EcSession> =>
-      ipcRenderer.invoke('ecat:connect', adapter),
+    connect: (adapterName: string): Promise<any> =>
+      ipcRenderer.invoke('ecat:connect', adapterName),
     disconnect: (): Promise<void> =>
       ipcRenderer.invoke('ecat:disconnect'),
-    getSlaves: (): Promise<EcSlaveInfo[]> =>
+    getSlaves: (): Promise<any[]> =>
       ipcRenderer.invoke('ecat:getSlaves'),
-    requestState: (slave: number, state: number): Promise<{ success: boolean; actualState: number; alStatusCode?: number }> =>
-      ipcRenderer.invoke('ecat:requestState', slave, state),
-    sdoRead: (slave: number, index: number, subIndex: number, size: number): Promise<SdoResult> =>
-      ipcRenderer.invoke('ecat:sdoRead', slave, index, subIndex, size),
-    sdoWrite: (slave: number, index: number, subIndex: number, dataHex: string, dataType: string): Promise<SdoResult> =>
-      ipcRenderer.invoke('ecat:sdoWrite', slave, index, subIndex, dataHex, dataType),
+    requestState: (slaveIndex: number, targetState: number): Promise<any> =>
+      ipcRenderer.invoke('ecat:requestState', slaveIndex, targetState),
+    sdoRead: (slaveIndex: number, index: number, subIndex: number, size: number): Promise<any> =>
+      ipcRenderer.invoke('ecat:sdoRead', slaveIndex, index, subIndex, size),
+    sdoWrite: (slaveIndex: number, index: number, subIndex: number, dataHex: string, dataType: string): Promise<any> =>
+      ipcRenderer.invoke('ecat:sdoWrite', slaveIndex, index, subIndex, dataHex, dataType),
     startPdo: (intervalMs?: number): Promise<void> =>
       ipcRenderer.invoke('ecat:startPdo', intervalMs),
     stopPdo: (): Promise<void> =>
       ipcRenderer.invoke('ecat:stopPdo'),
-    importEsi: (xml: string): Promise<EsiDevice> =>
-      ipcRenderer.invoke('ecat:importEsi', xml),
-    scanOd: (slave: number): Promise<OdEntry[]> =>
-      ipcRenderer.invoke('ecat:scanOd', slave),
-    getErrorCounters: (slave: number): Promise<ErrorCounters> =>
-      ipcRenderer.invoke('ecat:getErrorCounters', slave),
-    clearErrorCounters: (slave: number): Promise<void> =>
-      ipcRenderer.invoke('ecat:clearErrorCounters', slave),
-    resolvePdoSignals: (slave: number): Promise<PdoSignal[]> =>
-      ipcRenderer.invoke('ecat:resolvePdoSignals', slave),
-    writeOutputPdo: (slave: number, offset: number, data: number[]): Promise<void> =>
-      ipcRenderer.invoke('ecat:writeOutputPdo', slave, offset, data),
-    foeUpload: (slave: number, filename: string, data: number[], password: number): Promise<FoeResult> =>
-      ipcRenderer.invoke('ecat:foeUpload', slave, filename, data, password),
-    siiRead: (slave: number, offset: number, size: number): Promise<number[]> =>
-      ipcRenderer.invoke('ecat:siiRead', slave, offset, size),
-    siiWrite: (slave: number, offset: number, data: number[]): Promise<boolean> =>
-      ipcRenderer.invoke('ecat:siiWrite', slave, offset, data),
-    onPdoData: (callback: (slave: number, input: number[], output: number[]) => void): (() => void) => {
-      const handler = (_event: Electron.IpcRendererEvent, slave: number, input: number[], output: number[]) => {
-        callback(slave, input, output);
+    importEsi: (xmlContent: string): Promise<any> =>
+      ipcRenderer.invoke('ecat:importEsi', xmlContent),
+    scanOd: (slaveIndex: number): Promise<any> =>
+      ipcRenderer.invoke('ecat:scanOd', slaveIndex),
+    getErrorCounters: (slaveIndex: number): Promise<any> =>
+      ipcRenderer.invoke('ecat:getErrorCounters', slaveIndex),
+    clearErrorCounters: (slaveIndex: number): Promise<void> =>
+      ipcRenderer.invoke('ecat:clearErrorCounters', slaveIndex),
+    resolvePdoSignals: (slaveIndex: number): Promise<any> =>
+      ipcRenderer.invoke('ecat:resolvePdoSignals', slaveIndex),
+    writeOutputPdo: (slaveIndex: number, offset: number, data: number[]): Promise<void> =>
+      ipcRenderer.invoke('ecat:writeOutputPdo', slaveIndex, offset, data),
+    foeUpload: (slaveIndex: number, filename: string, data: number[], password: number): Promise<any> =>
+      ipcRenderer.invoke('ecat:foeUpload', slaveIndex, filename, data, password),
+    siiRead: (slaveIndex: number, offset: number, size: number): Promise<any> =>
+      ipcRenderer.invoke('ecat:siiRead', slaveIndex, offset, size),
+    siiWrite: (slaveIndex: number, offset: number, data: number[]): Promise<any> =>
+      ipcRenderer.invoke('ecat:siiWrite', slaveIndex, offset, data),
+    onPdoData: (callback: (slaveIndex: number, input: any, output: any) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, slaveIndex: number, input: any, output: any) => {
+        callback(slaveIndex, input, output);
       };
       ipcRenderer.on('ecat:pdoData', handler);
       return () => ipcRenderer.removeListener('ecat:pdoData', handler);
@@ -308,15 +303,15 @@ const api = {
       ipcRenderer.on('ecat:wkcError', handler);
       return () => ipcRenderer.removeListener('ecat:wkcError', handler);
     },
-    onStateChange: (callback: (session: EcSession) => void): (() => void) => {
-      const handler = (_event: Electron.IpcRendererEvent, session: EcSession) => {
-        callback(session);
+    onStateChange: (callback: (state: any) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, state: any) => {
+        callback(state);
       };
       ipcRenderer.on('ecat:stateChange', handler);
       return () => ipcRenderer.removeListener('ecat:stateChange', handler);
     },
-    onEmergency: (callback: (msg: EmergencyMsg) => void): (() => void) => {
-      const handler = (_event: Electron.IpcRendererEvent, msg: EmergencyMsg) => {
+    onEmergency: (callback: (msg: any) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, msg: any) => {
         callback(msg);
       };
       ipcRenderer.on('ecat:emergency', handler);

@@ -14,6 +14,7 @@ interface CachedTerminal {
   wrapper: HTMLDivElement;
   initialized: boolean;
   ipcCleanup: (() => void) | null;
+  ghostOverlay: HTMLSpanElement;
   /** Timestamp gutter state */
   gutter: {
     /** Time string per absolute line index (scrollback + viewport) */
@@ -64,7 +65,7 @@ function getLightTheme() {
     cursor: '#4f46e5',
     cursorAccent: '#d5dbd7',
     selectionBackground: '#4f46e540',
-    black: '#1a1f1c',
+    black: '#8a9490',
     red: '#dc2626',
     green: '#16a34a',
     yellow: '#ca8a04',
@@ -214,18 +215,63 @@ function getOrCreateTerminal(sessionId: string, isDark: boolean): CachedTerminal
   // --- Inline autocomplete (fish-style ghost suggestion) ---
   let ghostSuffix = '';
   let lastSuggestionInput = ''; // track lineBuffer to avoid redundant updates
+  let suppressSuggestion = false; // suppress ghost during Tab completion / control sequences
+
+  // --- Ghost suggestion via DOM overlay (never touches terminal buffer) ---
+  const ghostOverlay = document.createElement('span');
+  ghostOverlay.style.position = 'absolute';
+  ghostOverlay.style.pointerEvents = 'none';
+  ghostOverlay.style.whiteSpace = 'pre';
+  ghostOverlay.style.zIndex = '1';
+  ghostOverlay.style.display = 'none';
+  // Will be appended to terminal element after open()
+
+  function getGhostColor(): string {
+    const theme = useAppStore.getState().theme;
+    return theme === 'dark' ? '#6b7280' : '#95a09a';
+  }
 
   function clearGhost() {
     if (!ghostSuffix) return;
-    terminal.write('\x1b[u\x1b[K');
+    ghostOverlay.style.display = 'none';
+    ghostOverlay.textContent = '';
     ghostSuffix = '';
     lastSuggestionInput = '';
+  }
+
+  /** Silently discard ghost state (same as clearGhost for DOM approach). */
+  function discardGhost() {
+    clearGhost();
+  }
+
+  function positionGhostOverlay() {
+    if (!ghostSuffix) return;
+    try {
+      const buf = terminal.buffer.active;
+      const cursorX = buf.cursorX;
+      const cursorY = buf.cursorY;
+      const dims = (terminal as any)._core?._renderService?.dimensions;
+      if (!dims?.css?.cell?.width || !dims?.css?.cell?.height) { ghostOverlay.style.display = 'none'; return; }
+      const cellW = dims.css.cell.width;
+      const cellH = dims.css.cell.height;
+      ghostOverlay.style.left = `${cursorX * cellW}px`;
+      ghostOverlay.style.top = `${cursorY * cellH}px`;
+      ghostOverlay.style.height = `${cellH}px`;
+      ghostOverlay.style.lineHeight = `${cellH}px`;
+      ghostOverlay.style.fontSize = `${terminal.options.fontSize || 12}px`;
+      ghostOverlay.style.fontFamily = terminal.options.fontFamily || 'monospace';
+      ghostOverlay.style.color = getGhostColor();
+      ghostOverlay.style.display = '';
+    } catch {
+      ghostOverlay.style.display = 'none';
+    }
   }
 
   function showGhost(suffix: string) {
     if (!suffix) return;
     ghostSuffix = suffix;
-    terminal.write('\x1b[s\x1b[2m\x1b[90m' + suffix + '\x1b[0m\x1b[u');
+    ghostOverlay.textContent = suffix;
+    positionGhostOverlay();
   }
 
   function findSuggestion(prefix: string): string {
@@ -241,7 +287,7 @@ function getOrCreateTerminal(sessionId: string, isDark: boolean): CachedTerminal
   }
 
   function updateSuggestion() {
-    if (inAlternateScreen) { clearGhost(); return; }
+    if (inAlternateScreen || suppressSuggestion) { clearGhost(); return; }
     // Skip if lineBuffer hasn't changed — avoids resetting cursor blink
     if (lineBuffer === lastSuggestionInput && ghostSuffix) return;
     lastSuggestionInput = lineBuffer;
@@ -258,6 +304,64 @@ function getOrCreateTerminal(sessionId: string, isDark: boolean): CachedTerminal
     lineTimestamps[absLine] = formatTime(new Date());
   }
 
+  let lastDetectedCwd = '';
+  let cwdDetectTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function detectCwdFromPrompt() {
+    const buf = terminal.buffer.active;
+    const cursorLine = buf.getLine(buf.baseY + buf.cursorY);
+    if (!cursorLine) return;
+    const lineText = cursorLine.translateToString(true);
+    if (!lineText) return;
+
+    // Match common prompt patterns:
+    // "user@host:path$" or "user@host:path# " (bash default)
+    // "root@YSA-2504-1064:/home/luotang#" — path may contain slashes
+    // "[user@host path]$" (CentOS/RHEL style)
+    let cwd = '';
+
+    // Pattern 1: user@host:path$ or user@host:path# (path is between : and $ or #)
+    const m1 = lineText.match(/@[^:]+:([^\s$#]+)\s*[$#]/);
+    if (m1) {
+      cwd = m1[1];
+    }
+
+    // Pattern 2: [user@host path]$ — path is last word before ]
+    if (!cwd) {
+      const m2 = lineText.match(/\[[^\]]*\s+([^\]\s]+)\]\s*[$#]/);
+      if (m2) cwd = m2[1];
+    }
+
+    if (!cwd || cwd === lastDetectedCwd) return;
+    lastDetectedCwd = cwd;
+
+    // Expand ~ to home directory path
+    if (cwd === '~') {
+      const userMatch = lineText.match(/(\w+)@/);
+      if (userMatch) {
+        const user = userMatch[1];
+        cwd = user === 'root' ? '/root' : `/home/${user}`;
+      }
+    } else if (cwd.startsWith('~/')) {
+      const userMatch = lineText.match(/(\w+)@/);
+      if (userMatch) {
+        const user = userMatch[1];
+        const home = user === 'root' ? '/root' : `/home/${user}`;
+        cwd = home + cwd.slice(1);
+      }
+    }
+
+    useAppStore.getState().setSessionCwd(sessionId, cwd);
+  }
+
+  function scheduleCwdDetect() {
+    if (cwdDetectTimer) clearTimeout(cwdDetectTimer);
+    cwdDetectTimer = setTimeout(() => {
+      detectCwdFromPrompt();
+      cwdDetectTimer = null;
+    }, 150);
+  }
+
   const dataDisposable = terminal.onData((data) => {
     try {
       if (!inAlternateScreen) {
@@ -266,24 +370,46 @@ function getOrCreateTerminal(sessionId: string, isDark: boolean): CachedTerminal
           clearGhost();
           lineBuffer += accepted;
           window.api.ssh.write(sessionId, accepted);
+          suppressSuggestion = false;
           return;
         }
 
         clearGhost();
 
         if (data === '\r') {
-          if (lineBuffer.trim()) {
-            useAppStore.getState().addCommand(sessionId, lineBuffer);
+          // Read the actual command line from xterm buffer (includes tab-completed text)
+          const buf = terminal.buffer.active;
+          const cursorLine = buf.getLine(buf.baseY + buf.cursorY);
+          if (cursorLine) {
+            const fullLine = cursorLine.translateToString(true).trim();
+            // Strip common prompt patterns: "user@host:path# cmd" or "user@host:path$ cmd"
+            const promptMatch = fullLine.match(/[$#%>]\s*(.*)/);
+            const cmd = promptMatch ? promptMatch[1].trim() : fullLine;
+            if (cmd) {
+              useAppStore.getState().addCommand(sessionId, cmd);
+            }
           }
           lineBuffer = '';
+          suppressSuggestion = false;
         } else if (data === '\x7f' || data === '\b') {
           lineBuffer = lineBuffer.slice(0, -1);
+          suppressSuggestion = false;
         } else if (data === '\x03') {
           lineBuffer = '';
+          suppressSuggestion = false;
+        } else if (data === '\t') {
+          // Tab key — suppress ghost suggestions until next normal input
+          // to avoid escape sequences interfering with bash tab completion output
+          suppressSuggestion = true;
         } else if (data.length === 1 && data.charCodeAt(0) >= 32) {
           lineBuffer += data;
+          suppressSuggestion = false;
         } else if (data.length > 1 && !data.startsWith('\x1b')) {
           lineBuffer += data;
+          suppressSuggestion = false;
+        } else {
+          // Escape sequences (arrow keys etc.) — suppress suggestions
+          suppressSuggestion = true;
         }
       }
     } catch (e) {
@@ -305,6 +431,9 @@ function getOrCreateTerminal(sessionId: string, isDark: boolean): CachedTerminal
     // Detect clear screen sequences
     const isClear = data.includes('\x1b[2J') || data.includes('\x1bc');
 
+    // Clear ghost overlay (DOM-based, no terminal escape sequences needed)
+    if (ghostSuffix) clearGhost();
+
     terminal.write(data);
 
     // Reset timestamps AFTER terminal processes the clear, so cursor is repositioned
@@ -319,6 +448,11 @@ function getOrCreateTerminal(sessionId: string, isDark: boolean): CachedTerminal
     // Show suggestion after server echo settles
     if (!inAlternateScreen && lineBuffer) {
       updateSuggestion();
+    }
+
+    // Detect CWD from prompt line after data settles
+    if (!inAlternateScreen) {
+      scheduleCwdDetect();
     }
   });
 
@@ -371,6 +505,7 @@ function getOrCreateTerminal(sessionId: string, isDark: boolean): CachedTerminal
     wrapper,
     initialized: false,
     ipcCleanup,
+    ghostOverlay,
     gutter: {
       lineTimestamps,
       canvas: gutterCanvas,
@@ -410,6 +545,12 @@ export default function TerminalView({ sessionId }: TerminalViewProps) {
     if (!cached.initialized) {
       const termContainer = wrapper.children[1] as HTMLDivElement;
       terminal.open(termContainer);
+      // Attach ghost suggestion overlay to xterm's screen element
+      const xtermScreen = terminal.element?.querySelector('.xterm-screen');
+      if (xtermScreen) {
+        (xtermScreen as HTMLElement).style.position = 'relative';
+        xtermScreen.appendChild(cached.ghostOverlay);
+      }
       cached.initialized = true;
     }
 

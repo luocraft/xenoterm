@@ -10,6 +10,7 @@ interface FileManagerProps {
 
 export default function FileManager({ sessionId }: FileManagerProps) {
   const addTransfer = useAppStore((s) => s.addTransfer);
+  const remoteCwd = useAppStore((s) => s.sessionCwdMap[sessionId]);
   // Bump counters to trigger child refresh after transfer completes
   const [localRefreshKey, setLocalRefreshKey] = useState(0);
   const [remoteRefreshKey, setRemoteRefreshKey] = useState(0);
@@ -38,17 +39,24 @@ export default function FileManager({ sessionId }: FileManagerProps) {
         const remotePath = targetPath.endsWith('/')
           ? `${targetPath}${file.name}`
           : `${targetPath}/${file.name}`;
-        const transferId = await window.api.sftp.upload(sessionId, file.path, remotePath);
-        pendingTransfers.current.set(transferId, 'upload');
-        addTransfer({
-          transferId,
-          filename: file.name,
-          direction: 'upload',
-          bytesTransferred: 0,
-          totalBytes: file.size || 0,
-          speed: 0,
-          status: 'transferring',
-        });
+        if (file.isDirectory) {
+          const transferIds = await window.api.sftp.uploadDir(sessionId, file.path, remotePath);
+          for (const tid of transferIds) {
+            pendingTransfers.current.set(tid, 'upload');
+          }
+        } else {
+          const transferId = await window.api.sftp.upload(sessionId, file.path, remotePath);
+          pendingTransfers.current.set(transferId, 'upload');
+          addTransfer({
+            transferId,
+            filename: file.name,
+            direction: 'upload',
+            bytesTransferred: 0,
+            totalBytes: file.size || 0,
+            speed: 0,
+            status: 'transferring',
+          });
+        }
       } catch (err) {
         console.error(`Upload failed for ${file.name}:`, err);
       }
@@ -62,17 +70,24 @@ export default function FileManager({ sessionId }: FileManagerProps) {
         const localPath = targetPath.endsWith(sep)
           ? `${targetPath}${file.name}`
           : `${targetPath}${sep}${file.name}`;
-        const transferId = await window.api.sftp.download(sessionId, file.path, localPath);
-        pendingTransfers.current.set(transferId, 'download');
-        addTransfer({
-          transferId,
-          filename: file.name,
-          direction: 'download',
-          bytesTransferred: 0,
-          totalBytes: file.size || 0,
-          speed: 0,
-          status: 'transferring',
-        });
+        if (file.isDirectory) {
+          const transferIds = await window.api.sftp.downloadDir(sessionId, file.path, localPath);
+          for (const tid of transferIds) {
+            pendingTransfers.current.set(tid, 'download');
+          }
+        } else {
+          const transferId = await window.api.sftp.download(sessionId, file.path, localPath);
+          pendingTransfers.current.set(transferId, 'download');
+          addTransfer({
+            transferId,
+            filename: file.name,
+            direction: 'download',
+            bytesTransferred: 0,
+            totalBytes: file.size || 0,
+            speed: 0,
+            status: 'transferring',
+          });
+        }
       } catch (err) {
         console.error(`Download failed for ${file.name}:`, err);
       }
@@ -90,7 +105,9 @@ export default function FileManager({ sessionId }: FileManagerProps) {
         <RemoteFileBrowser
           sessionId={sessionId}
           onDrop={handleUpload}
+          onDownloadFiles={handleDownload}
           refreshKey={remoteRefreshKey}
+          syncPath={remoteCwd}
           onDragStart={(e, file) => {
             e.dataTransfer.setData('application/json', JSON.stringify({ source: 'remote', file }));
             e.dataTransfer.effectAllowed = 'copy';

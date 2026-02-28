@@ -150,11 +150,10 @@ export default function ConnectionForm({ editHost, onClose }: ConnectionFormProp
   });
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center" style={{ backgroundColor: 'var(--color-overlay)' }} onClick={onClose}>
+    <div className="fixed inset-0 z-40 flex items-center justify-center" style={{ backgroundColor: 'var(--color-overlay)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div
         className="bg-[var(--color-sidebar)] rounded-xl shadow-2xl w-[420px] max-h-[85vh] overflow-y-auto"
         style={{ border: '1px solid var(--color-input-border)' }}
-        onClick={(e) => e.stopPropagation()}
       >
         <div className="p-4 flex justify-between items-center" style={{ borderBottom: '1px solid var(--color-border)' }}>
           <h2 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
@@ -163,7 +162,7 @@ export default function ConnectionForm({ editHost, onClose }: ConnectionFormProp
           <button onClick={onClose} className="text-lg" style={{ color: 'var(--color-text-muted)' }}>×</button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-4 space-y-3">
+        <form onSubmit={handleSubmit} className="p-4 space-y-3" spellCheck={false} autoComplete="off">
 
           <Field label={t('connForm.name')} error={errors.name}>
             <input className={inputClass('name')} style={inputStyle('name')} value={form.name}

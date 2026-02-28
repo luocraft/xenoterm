@@ -1,6 +1,84 @@
-// Shared types - stub for task 1.1
-// Full implementation in task 1.2
-export {};
+// === SSH / Connection Types ===
+
+export type SessionStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
+
+export interface HostEntry {
+  id: string;
+  name: string;
+  hostname: string;
+  port: number;
+  username: string;
+  authMethod: 'password' | 'publicKey';
+  password?: string;
+  privateKeyPath?: string;
+  passphrase?: string;
+  group?: string;
+  jumpHost?: string;
+  keepAliveInterval?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SSHSession {
+  id: string;
+  hostEntryId: string;
+  status: SessionStatus;
+  connectedAt?: string;
+  error?: string;
+}
+
+export interface ConnectionGroup {
+  id: string;
+  name: string;
+  parentId?: string;
+  hostIds: string[];
+}
+
+
+export interface FileEntry {
+  name: string;
+  path: string;
+  isDirectory: boolean;
+  size: number;
+  modifiedAt: string;
+  permissions: string;
+}
+
+export type TransferDirection = 'upload' | 'download';
+export type TransferStatus = 'pending' | 'transferring' | 'completed' | 'failed' | 'cancelled';
+
+export interface TransferProgress {
+  transferId: string;
+  filename: string;
+  direction: TransferDirection;
+  bytesTransferred: number;
+  totalBytes: number;
+  speed: number;
+  status: TransferStatus;
+  error?: string;
+}
+
+export interface AppConfig {
+  theme: 'dark' | 'light';
+  terminal: {
+    fontFamily: string;
+    fontSize: number;
+    colorScheme: string;
+  };
+  sidebarCollapsed: boolean;
+  defaultKeepAlive: number;
+}
+
+export interface ExportData {
+  version: string;
+  hosts: HostEntry[];
+  groups: ConnectionGroup[];
+}
+
+export interface ImportResult {
+  imported: number;
+  errors: string[];
+}
 
 // === Network Debug Types ===
 
@@ -13,12 +91,10 @@ export interface NetSession {
   protocol: NetProtocol;
   host: string;
   port: number;
-  /** For UDP: bind port for receiving */
   localPort?: number;
   status: NetSessionStatus;
   error?: string;
   createdAt: string;
-  /** For TCP server: connected client addresses */
   clients?: string[];
 }
 
@@ -32,10 +108,8 @@ export interface NetMessage {
   data: string;
   encoding: NetDataEncoding;
   timestamp: number;
-  /** For TCP server / UDP: remote address */
   remoteAddress?: string;
 }
-
 
 // === Serial Port Types ===
 

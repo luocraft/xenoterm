@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import type { CanFrame } from '../../main/services/can/can-driver.interface';
-import type { DbcDatabase, DbcSignal } from '../../main/services/can/dbc-parser';
+import type { CanFrame } from '../../../main/services/can/can-driver.interface';
+import type { DbcDatabase, DbcSignal } from '../../../main/services/can/dbc-parser';
 
 export interface CanSession {
   id: string;
@@ -16,7 +16,7 @@ export interface CanSession {
 export interface CanMessageRow {
   seq: number;
   frame: CanFrame;
-  messageName?: string; // from DBC
+  messageName?: string;
 }
 
 export interface MonitoredSignal {
@@ -25,7 +25,7 @@ export interface MonitoredSignal {
   extended: boolean;
   signal: DbcSignal;
   value: number;
-  history: { t: number; v: number }[]; // for chart — last N data points
+  history: { t: number; v: number }[];
 }
 
 export interface SendListItem {
@@ -53,7 +53,6 @@ export interface MessageStats {
 }
 
 export interface CanSessionUI {
-  // Send panel
   sendId: string;
   sendDlc: string;
   sendData: string;
@@ -62,24 +61,16 @@ export interface CanSessionUI {
   sendBrs: boolean;
   timerInterval: string;
   timerRunning: boolean;
-  // Filter
   idFilter: string;
-  // Scroll
   autoScroll: boolean;
-  // Message filter
   messageFilter: 'all' | 'tx' | 'rx';
-  // Recording
   recording: boolean;
-  // View mode
   viewMode: 'trace' | 'stats' | 'j1939' | 'uds';
-  // Send list
   sendList: SendListItem[];
 }
 
-/** Valid CAN FD data lengths */
 const FD_DATA_LENGTHS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 12, 16, 20, 24, 32, 48, 64];
 
-/** Map a desired byte count to the nearest valid FD data length (round up) */
 function fdNearestLength(len: number): number {
   for (const v of FD_DATA_LENGTHS) {
     if (v >= len) return v;
@@ -105,24 +96,17 @@ const defaultCanUI = (): CanSessionUI => ({
 });
 
 const MAX_MESSAGES = 5000;
-
-/** Timer handles — survive tab switches */
 const timerHandles = new Map<string, ReturnType<typeof setInterval>>();
-/** Send list timers — key: `${sessionId}:${itemId}` */
 const sendListTimers = new Map<string, ReturnType<typeof setInterval>>();
-/** Recording IDs */
 const activeRecordings = new Map<string, string>();
-/** Bus load tracking — frame count per second window */
 const busLoadCounters = new Map<string, { count: number; lastReset: number }>();
 
-/** Increment bus load frame counter (called for both TX and RX) */
 function bumpBusLoad(sessionId: string, frameCount: number): void {
   const blc = busLoadCounters.get(sessionId) || { count: 0, lastReset: Date.now() };
   blc.count += frameCount;
   busLoadCounters.set(sessionId, blc);
 }
 
-/** Calculate and update bus load state if enough time has elapsed */
 function updateBusLoadState(sessionId: string, set: Function, get: Function): void {
   const blc = busLoadCounters.get(sessionId);
   if (!blc) return;
@@ -140,15 +124,16 @@ function updateBusLoadState(sessionId: string, set: Function, get: Function): vo
   busLoadCounters.set(sessionId, blc);
   set({ busLoad: bl });
 }
-/** Session start time for relative timestamp display */
+
 const sessionStartTime = new Map<string, number>();
 
-/** Get session start time for relative timestamp display */
 export function getSessionStartTime(sessionId: string): number {
   return sessionStartTime.get(sessionId) || 0;
 }
 
 const SIGNAL_HISTORY_MAX = 1000;
+
+
 
 export interface CanDebugStore {
   sessions: CanSession[];
@@ -156,45 +141,31 @@ export interface CanDebugStore {
   messages: Map<string, CanMessageRow[]>;
   sessionUI: Map<string, CanSessionUI>;
   seqCounters: Map<string, number>;
-
-  // DBC
   dbc: DbcDatabase | null;
   monitoredSignals: MonitoredSignal[];
-  // Stats
-  messageStats: Map<string, Map<number, MessageStats>>; // sessionId → canId → stats
-  busLoad: Map<string, number>; // sessionId → load %
+  messageStats: Map<string, Map<number, MessageStats>>;
+  busLoad: Map<string, number>;
 
-  // Actions
   openDevice: (driverName: string, deviceType: number, deviceIndex: number, channel: number, baudRate: number, fdConfig?: { protocol?: number; mode?: number; dataBaudRate?: number; nonIso?: boolean; ch1BaudRate?: number; ch1DataBaudRate?: number }) => Promise<void>;
   closeDevice: (sessionId: string) => void;
   removeSession: (sessionId: string) => void;
   setActiveSession: (id: string | null) => void;
   clearMessages: (sessionId: string) => void;
   updateSessionUI: (sessionId: string, patch: Partial<CanSessionUI>) => void;
-
-  // DBC
   loadDbc: (content: string) => Promise<void>;
   unloadDbc: () => void;
   addMonitorSignal: (sessionId: string, messageId: number, extended: boolean, signal: DbcSignal) => void;
   removeMonitorSignal: (signalName: string, messageId: number, sessionId?: string) => void;
-
-  // Send
   sendFrame: (sessionId: string) => void;
   startTimer: (sessionId: string) => void;
   stopTimer: (sessionId: string) => void;
-
-  // Send list
   addSendListItem: (sessionId: string) => void;
   removeSendListItem: (sessionId: string, itemId: string) => void;
   updateSendListItem: (sessionId: string, itemId: string, patch: Partial<SendListItem>) => void;
   toggleSendListItem: (sessionId: string, itemId: string) => void;
   sendListItemOnce: (sessionId: string, itemId: string) => void;
-
-  // Recording
   startRecording: (sessionId: string, filePath: string) => Promise<void>;
   stopRecording: (sessionId: string) => Promise<void>;
-
-  // ASC replay
   replayAsc: (sessionId: string, content: string) => void;
 }
 
@@ -246,103 +217,97 @@ export const useCanDebugStore = create<CanDebugStore>((set, get) => ({
         };
       });
 
-      // Listen for CAN data (batch)
+      // Listen for CAN data via extension IPC broadcast
       window.api.can.onData(sessionId, (frames: CanFrame[]) => {
-      // Bus load tracking
-      bumpBusLoad(sessionId, frames.length);
-      const blc = busLoadCounters.get(sessionId)!;
-      const elapsed = Date.now() - blc.lastReset;
+        bumpBusLoad(sessionId, frames.length);
+        const blc = busLoadCounters.get(sessionId)!;
+        const elapsed = Date.now() - blc.lastReset;
 
-      set((state) => {
-        const msgs = new Map(state.messages);
-        const seqs = new Map(state.seqCounters);
-        let seq = seqs.get(sessionId) || 0;
-        const existing = msgs.get(sessionId) || [];
-        const db = state.dbc;
+        set((state) => {
+          const msgs = new Map(state.messages);
+          const seqs = new Map(state.seqCounters);
+          let seq = seqs.get(sessionId) || 0;
+          const existing = msgs.get(sessionId) || [];
+          const db = state.dbc;
 
-        const newRows: CanMessageRow[] = frames.map((f) => {
-          seq++;
-          writeCanRecording(sessionId, f, seq);
-          const msgDef = db ? db.messages.find((m) => m.id === f.id && m.extended === f.extended) : undefined;
-          return { seq, frame: f, messageName: msgDef?.name };
-        });
-
-        const combined = [...existing, ...newRows];
-        msgs.set(sessionId, combined.length > MAX_MESSAGES ? combined.slice(-MAX_MESSAGES) : combined);
-        seqs.set(sessionId, seq);
-
-        // Update message stats
-        const allStats = new Map(state.messageStats);
-        const sessionStats = new Map(allStats.get(sessionId) || new Map());
-        const now = Date.now();
-        for (const f of frames) {
-          const key = f.id;
-          const prev = sessionStats.get(key);
-          if (prev) {
-            const dt = (now - prev.lastSeen) / 1000;
-            const alpha = 0.3;
-            const instantFps = dt > 0 ? 1 / dt : prev.fps;
-            prev.fps = prev.fps > 0 ? alpha * instantFps + (1 - alpha) * prev.fps : instantFps;
-            prev.count++;
-            prev.lastSeen = now;
-            prev.lastData = f.data.slice(0, f.dlc);
-            prev.lastDlc = f.dlc;
-          } else {
+          const newRows: CanMessageRow[] = frames.map((f) => {
+            seq++;
+            writeCanRecording(sessionId, f, seq);
             const msgDef = db ? db.messages.find((m) => m.id === f.id && m.extended === f.extended) : undefined;
-            sessionStats.set(key, {
-              canId: f.id, extended: f.extended, name: msgDef?.name,
-              count: 1, firstSeen: now, lastSeen: now, fps: 0,
-              lastData: f.data.slice(0, f.dlc), lastDlc: f.dlc,
-            });
-          }
-        }
-        allStats.set(sessionId, sessionStats);
+            return { seq, frame: f, messageName: msgDef?.name };
+          });
 
-        // Bus load: calculate every second
-        const bl = new Map(state.busLoad);
-        if (elapsed >= 1000) {
-          // Approximate: each standard CAN frame ≈ 111 bits at max
-          const bitsPerFrame = 111;
-          const sess = state.sessions.find((s) => s.id === sessionId);
-          const baud = sess?.baudRate || 500000;
-          const load = (blc.count * bitsPerFrame / (elapsed / 1000)) / baud * 100;
-          bl.set(sessionId, Math.min(100, load));
-          blc.count = 0;
-          blc.lastReset = Date.now();
-          busLoadCounters.set(sessionId, blc);
-        }
+          const combined = [...existing, ...newRows];
+          msgs.set(sessionId, combined.length > MAX_MESSAGES ? combined.slice(-MAX_MESSAGES) : combined);
+          seqs.set(sessionId, seq);
 
-        // Update monitored signals with history (only for this session)
-        const monitored = state.monitoredSignals.map((ms) => {
-          if (ms.sessionId !== sessionId) return ms;
-          const latestFrame = frames.findLast((f) => f.id === ms.messageId && f.extended === ms.extended);
-          if (latestFrame) {
-            const raw = extractRaw(latestFrame.data, ms.signal);
-            const val = applySignedAndScale(raw, ms.signal);
-            const history = [...ms.history, { t: now, v: val }];
-            if (history.length > SIGNAL_HISTORY_MAX) history.splice(0, history.length - SIGNAL_HISTORY_MAX);
-            return { ...ms, value: val, history };
+          const allStats = new Map(state.messageStats);
+          const sessionStats = new Map(allStats.get(sessionId) || new Map());
+          const now = Date.now();
+          for (const f of frames) {
+            const key = f.id;
+            const prev = sessionStats.get(key);
+            if (prev) {
+              const dt = (now - prev.lastSeen) / 1000;
+              const alpha = 0.3;
+              const instantFps = dt > 0 ? 1 / dt : prev.fps;
+              prev.fps = prev.fps > 0 ? alpha * instantFps + (1 - alpha) * prev.fps : instantFps;
+              prev.count++;
+              prev.lastSeen = now;
+              prev.lastData = f.data.slice(0, f.dlc);
+              prev.lastDlc = f.dlc;
+            } else {
+              const msgDef = db ? db.messages.find((m) => m.id === f.id && m.extended === f.extended) : undefined;
+              sessionStats.set(key, {
+                canId: f.id, extended: f.extended, name: msgDef?.name,
+                count: 1, firstSeen: now, lastSeen: now, fps: 0,
+                lastData: f.data.slice(0, f.dlc), lastDlc: f.dlc,
+              });
+            }
           }
-          return ms;
+          allStats.set(sessionId, sessionStats);
+
+          const bl = new Map(state.busLoad);
+          if (elapsed >= 1000) {
+            const bitsPerFrame = 111;
+            const sess = state.sessions.find((s) => s.id === sessionId);
+            const baud = sess?.baudRate || 500000;
+            const load = (blc.count * bitsPerFrame / (elapsed / 1000)) / baud * 100;
+            bl.set(sessionId, Math.min(100, load));
+            blc.count = 0;
+            blc.lastReset = Date.now();
+            busLoadCounters.set(sessionId, blc);
+          }
+
+          const monitored = state.monitoredSignals.map((ms) => {
+            if (ms.sessionId !== sessionId) return ms;
+            const latestFrame = frames.findLast((f) => f.id === ms.messageId && f.extended === ms.extended);
+            if (latestFrame) {
+              const raw = extractRaw(latestFrame.data, ms.signal);
+              const val = applySignedAndScale(raw, ms.signal);
+              const history = [...ms.history, { t: now, v: val }];
+              if (history.length > SIGNAL_HISTORY_MAX) history.splice(0, history.length - SIGNAL_HISTORY_MAX);
+              return { ...ms, value: val, history };
+            }
+            return ms;
+          });
+
+          return { messages: msgs, seqCounters: seqs, monitoredSignals: monitored, messageStats: allStats, busLoad: bl };
         });
-
-        return { messages: msgs, seqCounters: seqs, monitoredSignals: monitored, messageStats: allStats, busLoad: bl };
       });
-    });
 
-    window.api.can.onError(sessionId, (error: string) => {
-      set((state) => ({
-        sessions: state.sessions.map((s) =>
-          s.id === sessionId ? { ...s, status: 'error' as const, error } : s
-        ),
-      }));
-    });
-    } // end for loop over sessions
+      window.api.can.onError(sessionId, (error: string) => {
+        set((state) => ({
+          sessions: state.sessions.map((s) =>
+            s.id === sessionId ? { ...s, status: 'error' as const, error } : s
+          ),
+        }));
+      });
+    }
   },
 
   closeDevice: (sessionId) => {
     window.api.can.close(sessionId);
-    // Stop timer
     const handle = timerHandles.get(sessionId);
     if (handle) { clearInterval(handle); timerHandles.delete(sessionId); }
     set((state) => ({
@@ -361,17 +326,12 @@ export const useCanDebugStore = create<CanDebugStore>((set, get) => ({
     if (recId) { window.api.recording.stop(recId); activeRecordings.delete(sessionId); }
     sessionStartTime.delete(sessionId);
     set((state) => {
-      const msgs = new Map(state.messages);
-      msgs.delete(sessionId);
-      const ui = new Map(state.sessionUI);
-      ui.delete(sessionId);
-      const seqs = new Map(state.seqCounters);
-      seqs.delete(sessionId);
+      const msgs = new Map(state.messages); msgs.delete(sessionId);
+      const ui = new Map(state.sessionUI); ui.delete(sessionId);
+      const seqs = new Map(state.seqCounters); seqs.delete(sessionId);
       return {
         sessions: state.sessions.filter((ss) => ss.id !== sessionId),
-        messages: msgs,
-        sessionUI: ui,
-        seqCounters: seqs,
+        messages: msgs, sessionUI: ui, seqCounters: seqs,
         activeSessionId: state.activeSessionId === sessionId
           ? (state.sessions.find((ss) => ss.id !== sessionId)?.id || null)
           : state.activeSessionId,
@@ -384,10 +344,8 @@ export const useCanDebugStore = create<CanDebugStore>((set, get) => ({
   clearMessages: (sessionId) => {
     sessionStartTime.set(sessionId, Date.now());
     set((state) => {
-      const msgs = new Map(state.messages);
-      msgs.set(sessionId, []);
-      const seqs = new Map(state.seqCounters);
-      seqs.set(sessionId, 0);
+      const msgs = new Map(state.messages); msgs.set(sessionId, []);
+      const seqs = new Map(state.seqCounters); seqs.set(sessionId, 0);
       return { messages: msgs, seqCounters: seqs };
     });
   },
@@ -414,9 +372,7 @@ export const useCanDebugStore = create<CanDebugStore>((set, get) => ({
         (ms) => ms.sessionId === sessionId && ms.messageId === messageId && ms.signal.name === signal.name
       );
       if (exists) return state;
-      return {
-        monitoredSignals: [...state.monitoredSignals, { sessionId, messageId, extended, signal, value: 0, history: [] }],
-      };
+      return { monitoredSignals: [...state.monitoredSignals, { sessionId, messageId, extended, signal, value: 0, history: [] }] };
     });
   },
 
@@ -438,35 +394,19 @@ export const useCanDebugStore = create<CanDebugStore>((set, get) => ({
     const maxLen = ui.sendFd ? fdNearestLength(dlc) : Math.min(dlc, 8);
     const dataBytes = [...parsedBytes.slice(0, maxLen), ...new Array(Math.max(0, maxLen - parsedBytes.length)).fill(0)];
     window.api.can.send(sessionId, {
-      id,
-      extended: ui.sendExtended,
-      remote: false,
-      dlc: maxLen,
-      data: dataBytes,
-      timestamp: 0,
-      direction: 'tx',
-      fd: ui.sendFd || undefined,
-      brs: ui.sendBrs || undefined,
+      id, extended: ui.sendExtended, remote: false, dlc: maxLen, data: dataBytes,
+      timestamp: 0, direction: 'tx', fd: ui.sendFd || undefined, brs: ui.sendBrs || undefined,
     });
 
-    // Add TX frame to message list so it shows in the display
     const txFrame: CanFrame = {
-      id,
-      extended: ui.sendExtended,
-      remote: false,
-      dlc: maxLen,
-      data: dataBytes,
-      timestamp: Date.now(),
-      direction: 'tx',
-      fd: ui.sendFd || undefined,
-      brs: ui.sendBrs || undefined,
+      id, extended: ui.sendExtended, remote: false, dlc: maxLen, data: dataBytes,
+      timestamp: Date.now(), direction: 'tx', fd: ui.sendFd || undefined, brs: ui.sendBrs || undefined,
     };
     bumpBusLoad(sessionId, 1);
     set((state) => {
       const msgs = new Map(state.messages);
       const seqs = new Map(state.seqCounters);
-      let seq = seqs.get(sessionId) || 0;
-      seq++;
+      let seq = seqs.get(sessionId) || 0; seq++;
       const existing = msgs.get(sessionId) || [];
       const db = state.dbc;
       const msgDef = db ? db.messages.find((m) => m.id === txFrame.id && m.extended === txFrame.extended) : undefined;
@@ -510,7 +450,6 @@ export const useCanDebugStore = create<CanDebugStore>((set, get) => ({
   startRecording: async (sessionId, filePath) => {
     const recId = crypto.randomUUID();
     await window.api.recording.start(filePath, recId);
-    // Write ASC header
     window.api.recording.write(recId, 'date ' + new Date().toLocaleString());
     window.api.recording.write(recId, 'base hex  timestamps absolute');
     window.api.recording.write(recId, 'no internal events logged');
@@ -520,25 +459,14 @@ export const useCanDebugStore = create<CanDebugStore>((set, get) => ({
 
   stopRecording: async (sessionId) => {
     const recId = activeRecordings.get(sessionId);
-    if (recId) {
-      await window.api.recording.stop(recId);
-      activeRecordings.delete(sessionId);
-    }
+    if (recId) { await window.api.recording.stop(recId); activeRecordings.delete(sessionId); }
     get().updateSessionUI(sessionId, { recording: false });
   },
 
-  // Send list
   addSendListItem: (sessionId) => {
     const item: SendListItem = {
-      id: crypto.randomUUID(),
-      canId: '100',
-      dlc: 8,
-      data: '00 00 00 00 00 00 00 00',
-      extended: false,
-      fd: false,
-      brs: false,
-      intervalMs: 100,
-      enabled: false,
+      id: crypto.randomUUID(), canId: '100', dlc: 8,
+      data: '00 00 00 00 00 00 00 00', extended: false, fd: false, brs: false, intervalMs: 100, enabled: false,
     };
     set((state) => {
       const ui = new Map(state.sessionUI);
@@ -549,7 +477,6 @@ export const useCanDebugStore = create<CanDebugStore>((set, get) => ({
   },
 
   removeSendListItem: (sessionId, itemId) => {
-    // Stop timer if running
     const key = `${sessionId}:${itemId}`;
     const h = sendListTimers.get(key);
     if (h) { clearInterval(h); sendListTimers.delete(key); }
@@ -565,10 +492,7 @@ export const useCanDebugStore = create<CanDebugStore>((set, get) => ({
     set((state) => {
       const ui = new Map(state.sessionUI);
       const prev = ui.get(sessionId) || defaultCanUI();
-      ui.set(sessionId, {
-        ...prev,
-        sendList: prev.sendList.map((i) => i.id === itemId ? { ...i, ...patch } : i),
-      });
+      ui.set(sessionId, { ...prev, sendList: prev.sendList.map((i) => i.id === itemId ? { ...i, ...patch } : i) });
       return { sessionUI: ui };
     });
   },
@@ -582,12 +506,10 @@ export const useCanDebugStore = create<CanDebugStore>((set, get) => ({
     const key = `${sessionId}:${itemId}`;
 
     if (item.enabled) {
-      // Stop
       const h = sendListTimers.get(key);
       if (h) { clearInterval(h); sendListTimers.delete(key); }
       get().updateSendListItem(sessionId, itemId, { enabled: false });
     } else {
-      // Start
       const sendOne = () => {
         const st = get();
         const s = st.sessions.find((ss) => ss.id === sessionId);
@@ -606,17 +528,14 @@ export const useCanDebugStore = create<CanDebugStore>((set, get) => ({
         const txFrame: CanFrame = {
           id, extended: it.extended, remote: false,
           dlc: maxLen, data: [...dataBytes.slice(0, maxLen), ...new Array(Math.max(0, maxLen - dataBytes.length)).fill(0)],
-          timestamp: Date.now(), direction: 'tx',
-          fd: it.fd || undefined, brs: it.brs || undefined,
+          timestamp: Date.now(), direction: 'tx', fd: it.fd || undefined, brs: it.brs || undefined,
         };
         window.api.can.send(sessionId, txFrame);
         bumpBusLoad(sessionId, 1);
-        // Add TX frame to message list
         set((state2) => {
           const msgs = new Map(state2.messages);
           const seqs = new Map(state2.seqCounters);
-          let seq = seqs.get(sessionId) || 0;
-          seq++;
+          let seq = seqs.get(sessionId) || 0; seq++;
           const existing = msgs.get(sessionId) || [];
           const db = state2.dbc;
           const msgDef = db ? db.messages.find((m) => m.id === txFrame.id && m.extended === txFrame.extended) : undefined;
@@ -648,18 +567,15 @@ export const useCanDebugStore = create<CanDebugStore>((set, get) => ({
     const maxLen = it.fd ? fdNearestLength(it.dlc) : Math.min(it.dlc, 8);
     const dataBytes = [...parsedBytes.slice(0, maxLen), ...new Array(Math.max(0, maxLen - parsedBytes.length)).fill(0)];
     const txFrame: CanFrame = {
-      id, extended: it.extended, remote: false,
-      dlc: maxLen, data: dataBytes,
-      timestamp: Date.now(), direction: 'tx',
-      fd: it.fd || undefined, brs: it.brs || undefined,
+      id, extended: it.extended, remote: false, dlc: maxLen, data: dataBytes,
+      timestamp: Date.now(), direction: 'tx', fd: it.fd || undefined, brs: it.brs || undefined,
     };
     window.api.can.send(sessionId, txFrame);
     bumpBusLoad(sessionId, 1);
     set((state2) => {
       const msgs = new Map(state2.messages);
       const seqs = new Map(state2.seqCounters);
-      let seq = seqs.get(sessionId) || 0;
-      seq++;
+      let seq = seqs.get(sessionId) || 0; seq++;
       const existing = msgs.get(sessionId) || [];
       const db = state2.dbc;
       const msgDef = db ? db.messages.find((m) => m.id === txFrame.id && m.extended === txFrame.extended) : undefined;
@@ -673,7 +589,6 @@ export const useCanDebugStore = create<CanDebugStore>((set, get) => ({
     updateBusLoadState(sessionId, set, get);
   },
 
-  // ASC replay
   replayAsc: (sessionId, content) => {
     const lines = content.split(/\r?\n/).filter((l) => l.trim() && !l.startsWith('date') && !l.startsWith('base') && !l.startsWith('no '));
     const frames: { delay: number; frame: CanFrame }[] = [];
@@ -697,7 +612,6 @@ export const useCanDebugStore = create<CanDebugStore>((set, get) => ({
       prevTs = ts;
       frames.push({ delay, frame: { id, extended: ext, remote: false, dlc, data, timestamp: ts * 1000, direction: dir } });
     }
-    // Replay with timing
     let idx = 0;
     const playNext = () => {
       if (idx >= frames.length) return;
@@ -706,8 +620,7 @@ export const useCanDebugStore = create<CanDebugStore>((set, get) => ({
         set((state) => {
           const msgs = new Map(state.messages);
           const seqs = new Map(state.seqCounters);
-          let seq = seqs.get(sessionId) || 0;
-          seq++;
+          let seq = seqs.get(sessionId) || 0; seq++;
           const existing = msgs.get(sessionId) || [];
           const db = state.dbc;
           const msgDef = db ? db.messages.find((m) => m.id === frame.id && m.extended === frame.extended) : undefined;
@@ -732,9 +645,7 @@ function extractRaw(data: number[], signal: DbcSignal): number {
       const bitPos = startBit + i;
       const byteIdx = Math.floor(bitPos / 8);
       const bitIdx = bitPos % 8;
-      if (byteIdx < data.length) {
-        value |= ((data[byteIdx] >> bitIdx) & 1) << i;
-      }
+      if (byteIdx < data.length) value |= ((data[byteIdx] >> bitIdx) & 1) << i;
     }
     return value;
   } else {
@@ -743,11 +654,8 @@ function extractRaw(data: number[], signal: DbcSignal): number {
     for (let i = bitLength - 1; i >= 0; i--) {
       const byteIdx = Math.floor(bitPos / 8);
       const bitIdx = bitPos % 8;
-      if (byteIdx < data.length) {
-        value |= ((data[byteIdx] >> bitIdx) & 1) << i;
-      }
-      if (bitIdx === 0) bitPos += 15;
-      else bitPos -= 1;
+      if (byteIdx < data.length) value |= ((data[byteIdx] >> bitIdx) & 1) << i;
+      if (bitIdx === 0) bitPos += 15; else bitPos -= 1;
     }
     return value;
   }

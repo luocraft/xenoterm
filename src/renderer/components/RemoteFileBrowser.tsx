@@ -7,12 +7,14 @@ interface RemoteFileBrowserProps {
   sessionId: string;
   onDragStart?: (e: React.DragEvent, file: FileEntry, source: 'remote') => void;
   onDrop?: (files: FileEntry[], targetPath: string) => void;
+  onDownloadFiles?: (files: FileEntry[], targetPath: string) => void;
   refreshKey?: number;
+  syncPath?: string;
 }
 
 const remotePathCache = new Map<string, string>();
 
-export default function RemoteFileBrowser({ sessionId, onDragStart, onDrop, refreshKey }: RemoteFileBrowserProps) {
+export default function RemoteFileBrowser({ sessionId, onDragStart, onDrop, onDownloadFiles, refreshKey, syncPath }: RemoteFileBrowserProps) {
   const t = useT();
   const [currentPath, setCurrentPath] = useState(() => remotePathCache.get(sessionId) || '/');
   const [files, setFiles] = useState<FileEntry[]>([]);
@@ -84,6 +86,15 @@ export default function RemoteFileBrowser({ sessionId, onDragStart, onDrop, refr
     if (refreshKey && refreshKey > 0 && currentPath) loadDirectory(currentPath);
   }, [refreshKey]);
 
+  // Sync to terminal CWD when it changes
+  const syncedPathRef = useRef<string>('');
+  useEffect(() => {
+    if (syncPath && syncPath !== syncedPathRef.current) {
+      syncedPathRef.current = syncPath;
+      loadDirectory(syncPath);
+    }
+  }, [syncPath, loadDirectory]);
+
   const handleSelect = useCallback((file: FileEntry, multi: boolean) => {
     setSelectedFiles((prev) => {
       const next = new Set(multi ? prev : []);
@@ -104,13 +115,19 @@ export default function RemoteFileBrowser({ sessionId, onDragStart, onDrop, refr
   }, []);
   const handleDragLeave = useCallback(() => setDragOver(false), []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault(); setDragOver(false);
     if (e.dataTransfer.files.length > 0) {
-      const osFiles: FileEntry[] = Array.from(e.dataTransfer.files).map((f) => ({
-        name: f.name, path: (f as File & { path?: string }).path || f.name,
-        isDirectory: false, size: f.size, modifiedAt: new Date(f.lastModified).toISOString(), permissions: ''
-      }));
+      const osFiles: FileEntry[] = [];
+      for (const f of Array.from(e.dataTransfer.files)) {
+        const filePath = (f as File & { path?: string }).path || f.name;
+        // Use main process fs.stat to reliably detect directories
+        const isDir = await window.api.local.isDirectory(filePath);
+        osFiles.push({
+          name: f.name, path: filePath,
+          isDirectory: isDir, size: f.size, modifiedAt: new Date(f.lastModified).toISOString(), permissions: ''
+        });
+      }
       onDrop?.(osFiles, currentPath);
       return;
     }
@@ -186,8 +203,28 @@ export default function RemoteFileBrowser({ sessionId, onDragStart, onDrop, refr
       <div className="px-2 py-1 text-[10px] uppercase tracking-wider flex items-center justify-between"
         style={{ color: 'var(--color-text-muted)', borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-input-bg)' }}>
         <span>Remote</span>
-        <button onClick={() => loadDirectory(currentPath)} className="transition-colors"
-          style={{ color: 'var(--color-text-dim)' }} title="Refresh">↻</button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={async () => {
+              if (selectedFiles.size === 0) return;
+              const targetPath = await window.api.local.ensureXtDownload();
+              const selected = files.filter((f) => selectedFiles.has(f.path));
+              onDownloadFiles?.(selected, targetPath);
+            }}
+            className="transition-colors px-1"
+            style={{ color: selectedFiles.size > 0 ? 'var(--color-accent)' : 'var(--color-text-secondary)' }}
+            title="Download selected to ~/Desktop/xtdownload">⬇</button>
+          <button
+            onClick={async () => {
+              const dir = await window.api.local.ensureXtDownload();
+              window.api.shell.openPath(dir);
+            }}
+            className="transition-colors px-1"
+            style={{ color: 'var(--color-text-secondary)' }}
+            title="Open xtdownload folder">📂</button>
+          <button onClick={() => loadDirectory(currentPath)} className="transition-colors"
+            style={{ color: 'var(--color-text-secondary)' }} title="Refresh">↻</button>
+        </div>
       </div>
       <div className="flex-1 overflow-hidden">
         <FileList files={displayFiles} loading={loading} currentPath={currentPath}

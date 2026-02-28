@@ -10,35 +10,35 @@ import ConnectionForm from './components/ConnectionForm';
 import ImportExportDialog from './components/ImportExportDialog';
 import ToastContainer from './components/Toast';
 import CommandHistory from './components/CommandHistory';
-import NetDebugPanel from './components/NetDebugPanel';
-import SerialDebugPanel from './components/SerialDebugPanel';
 import CanDebugPanel from './components/CanDebugPanel';
+import SerialDebugPanel from './components/SerialDebugPanel';
+import NetDebugPanel from './components/NetDebugPanel';
 import EtherCATPanel from './components/EtherCATPanel';
 import { LicenseDialog } from './components/LicenseDialog';
 import { useLayoutStore } from './store/layout-store';
 import { useT } from './i18n';
-import type { HostEntry } from '../shared/types';
 
 function WelcomeScreen({
   onSSH,
-  onNetwork,
+  onNet,
   onSerial,
-  onCAN,
-  onEtherCAT,
+  onCan,
+  onEthercat,
 }: {
   onSSH: () => void;
-  onNetwork: () => void;
+  onNet: () => void;
   onSerial: () => void;
-  onCAN: () => void;
-  onEtherCAT: () => void;
+  onCan: () => void;
+  onEthercat: () => void;
 }) {
   const t = useT();
+
   const features = [
     { emoji: '🖥', title: 'SSH', desc: t('welcome.ssh.desc'), color: '#3b82f6', onClick: onSSH },
-    { emoji: '🔌', title: 'Network', desc: t('welcome.net.desc'), color: '#8b5cf6', onClick: onNetwork },
+    { emoji: '🔌', title: 'Net', desc: t('welcome.net.desc'), color: '#10b981', onClick: onNet },
     { emoji: '⚡', title: 'Serial', desc: t('welcome.serial.desc'), color: '#f59e0b', onClick: onSerial },
-    { emoji: '🚗', title: 'CAN Bus', desc: t('welcome.can.desc'), color: '#ef4444', onClick: onCAN },
-    { emoji: '⚙️', title: 'EtherCAT', desc: t('welcome.ecat.desc'), color: '#22c55e', onClick: onEtherCAT },
+    { emoji: '🚗', title: 'CAN', desc: t('welcome.can.desc'), color: '#ef4444', onClick: onCan },
+    { emoji: '⚙️', title: 'EtherCAT', desc: t('welcome.ecat.desc'), color: '#8b5cf6', onClick: onEthercat },
   ];
 
   return (
@@ -155,13 +155,13 @@ export default function App() {
   const toggleCommandHistory = useAppStore((s) => s.toggleCommandHistory);
 
   const [showConnectionForm, setShowConnectionForm] = useState(false);
-  const [editingHost, setEditingHost] = useState<HostEntry | null>(null);
+  const [editingHost, setEditingHost] = useState<any>(null);
   const [showImportExport, setShowImportExport] = useState(false);
   const [passwordPrompt, setPasswordPrompt] = useState<{ hostId: string; hostName: string } | null>(null);
-  const [showNetDebug, setShowNetDebug] = useState(false);
-  const [showSerialDebug, setShowSerialDebug] = useState(false);
-  const [showCanDebug, setShowCanDebug] = useState(false);
-  const [showEthercat, setShowEthercat] = useState(false);
+  const [showCanPanel, setShowCanPanel] = useState(false);
+  const [showSerialPanel, setShowSerialPanel] = useState(false);
+  const [showNetPanel, setShowNetPanel] = useState(false);
+  const [showEthercatPanel, setShowEthercatPanel] = useState(false);
   const [showLicense, setShowLicense] = useState(false);
   const [licenseExpired, setLicenseExpired] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
@@ -290,8 +290,6 @@ export default function App() {
     }
   }, [layoutTree, activeTabId]);
 
-  const hasActiveTransfers = transfers.some((t) => t.status === 'pending' || t.status === 'transferring');
-
   // Determine what to render in the content area
   const activeWorkspace = workspaces.find((w) => w.id === activeTabId);
   const isWorkspaceView = !!activeWorkspace;
@@ -350,13 +348,13 @@ export default function App() {
         sidebar={
           <Sidebar
             onNewConnection={() => { setEditingHost(null); setShowConnectionForm(true); }}
-            onEditConnection={(host: HostEntry) => { setEditingHost(host); setShowConnectionForm(true); }}
+            onEditConnection={(host: any) => { setEditingHost(host); setShowConnectionForm(true); }}
             onImportExport={() => setShowImportExport(true)}
             onConnect={handleConnect}
-            onNetDebug={() => { setShowNetDebug((v) => !v); setShowSerialDebug(false); setShowCanDebug(false); setShowEthercat(false); }}
-            onSerialDebug={() => { setShowSerialDebug((v) => !v); setShowNetDebug(false); setShowCanDebug(false); setShowEthercat(false); }}
-            onCanDebug={() => { setShowCanDebug((v) => !v); setShowNetDebug(false); setShowSerialDebug(false); setShowEthercat(false); }}
-            onEthercatDebug={() => { setShowEthercat((v) => !v); setShowNetDebug(false); setShowSerialDebug(false); setShowCanDebug(false); }}
+            onNetPanel={() => { setShowNetPanel((v) => !v); setShowSerialPanel(false); setShowCanPanel(false); setShowEthercatPanel(false); }}
+            onSerialPanel={() => { setShowSerialPanel((v) => !v); setShowNetPanel(false); setShowCanPanel(false); setShowEthercatPanel(false); }}
+            onCanPanel={() => { setShowCanPanel((v) => !v); setShowNetPanel(false); setShowSerialPanel(false); setShowEthercatPanel(false); }}
+            onEthercatPanel={() => { setShowEthercatPanel((v) => !v); setShowNetPanel(false); setShowSerialPanel(false); setShowCanPanel(false); }}
             onLicenseClick={() => setShowLicense(true)}
           />
         }
@@ -365,29 +363,21 @@ export default function App() {
 
         {!hasContent ? (
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-            {showNetDebug ? (
-              <div className="flex-1 min-h-0 overflow-hidden">
-                <NetDebugPanel onClose={() => setShowNetDebug(false)} />
-              </div>
-            ) : showSerialDebug ? (
-              <div className="flex-1 min-h-0 overflow-hidden">
-                <SerialDebugPanel onClose={() => setShowSerialDebug(false)} />
-              </div>
-            ) : showCanDebug ? (
-              <div className="flex-1 min-h-0 overflow-hidden">
-                <CanDebugPanel onClose={() => setShowCanDebug(false)} />
-              </div>
-            ) : showEthercat ? (
-              <div className="flex-1 min-h-0 overflow-hidden">
-                <EtherCATPanel onClose={() => setShowEthercat(false)} />
-              </div>
+            {showNetPanel ? (
+              <NetDebugPanel onClose={() => setShowNetPanel(false)} />
+            ) : showSerialPanel ? (
+              <SerialDebugPanel onClose={() => setShowSerialPanel(false)} />
+            ) : showCanPanel ? (
+              <CanDebugPanel onClose={() => setShowCanPanel(false)} />
+            ) : showEthercatPanel ? (
+              <EtherCATPanel onClose={() => setShowEthercatPanel(false)} />
             ) : (
               <WelcomeScreen
                 onSSH={() => { setEditingHost(null); setShowConnectionForm(true); }}
-                onNetwork={() => { setShowNetDebug(true); setShowSerialDebug(false); setShowCanDebug(false); setShowEthercat(false); }}
-                onSerial={() => { setShowSerialDebug(true); setShowNetDebug(false); setShowCanDebug(false); setShowEthercat(false); }}
-                onCAN={() => { setShowCanDebug(true); setShowNetDebug(false); setShowSerialDebug(false); setShowEthercat(false); }}
-                onEtherCAT={() => { setShowEthercat(true); setShowNetDebug(false); setShowSerialDebug(false); setShowCanDebug(false); }}
+                onNet={() => setShowNetPanel(true)}
+                onSerial={() => setShowSerialPanel(true)}
+                onCan={() => setShowCanPanel(true)}
+                onEthercat={() => setShowEthercatPanel(true)}
               />
             )}
           </div>
@@ -432,8 +422,8 @@ export default function App() {
               </div>
             )}
 
-            {/* Net debug side panel */}
-            {showNetDebug && (
+            {/* Side panel for debug tools */}
+            {(showNetPanel || showSerialPanel || showCanPanel || showEthercatPanel) && (
               <>
                 <div
                   onMouseDown={(e) => { e.preventDefault(); setIsDraggingSidePanel(true); }}
@@ -444,58 +434,10 @@ export default function App() {
                   className="flex-shrink-0 overflow-hidden"
                   style={{ width: sidePanelWidth }}
                 >
-                  <NetDebugPanel onClose={() => setShowNetDebug(false)} />
-                </div>
-              </>
-            )}
-
-            {/* Serial debug side panel */}
-            {showSerialDebug && (
-              <>
-                <div
-                  onMouseDown={(e) => { e.preventDefault(); setIsDraggingSidePanel(true); }}
-                  className="flex-shrink-0 w-1 cursor-col-resize transition-colors"
-                  style={{ backgroundColor: isDraggingSidePanel ? 'var(--color-accent)' : 'var(--color-border)' }}
-                />
-                <div
-                  className="flex-shrink-0 overflow-hidden"
-                  style={{ width: sidePanelWidth }}
-                >
-                  <SerialDebugPanel onClose={() => setShowSerialDebug(false)} />
-                </div>
-              </>
-            )}
-
-            {/* CAN debug side panel */}
-            {showCanDebug && (
-              <>
-                <div
-                  onMouseDown={(e) => { e.preventDefault(); setIsDraggingSidePanel(true); }}
-                  className="flex-shrink-0 w-1 cursor-col-resize transition-colors"
-                  style={{ backgroundColor: isDraggingSidePanel ? 'var(--color-accent)' : 'var(--color-border)' }}
-                />
-                <div
-                  className="flex-shrink-0 overflow-hidden"
-                  style={{ width: sidePanelWidth }}
-                >
-                  <CanDebugPanel onClose={() => setShowCanDebug(false)} />
-                </div>
-              </>
-            )}
-
-            {/* EtherCAT debug side panel */}
-            {showEthercat && (
-              <>
-                <div
-                  onMouseDown={(e) => { e.preventDefault(); setIsDraggingSidePanel(true); }}
-                  className="flex-shrink-0 w-1 cursor-col-resize transition-colors"
-                  style={{ backgroundColor: isDraggingSidePanel ? 'var(--color-accent)' : 'var(--color-border)' }}
-                />
-                <div
-                  className="flex-shrink-0 overflow-hidden"
-                  style={{ width: sidePanelWidth }}
-                >
-                  <EtherCATPanel onClose={() => setShowEthercat(false)} />
+                  {showNetPanel && <NetDebugPanel onClose={() => setShowNetPanel(false)} />}
+                  {showSerialPanel && <SerialDebugPanel onClose={() => setShowSerialPanel(false)} />}
+                  {showCanPanel && <CanDebugPanel onClose={() => setShowCanPanel(false)} />}
+                  {showEthercatPanel && <EtherCATPanel onClose={() => setShowEthercatPanel(false)} />}
                 </div>
               </>
             )}

@@ -171,20 +171,20 @@ export const useEthercatStore = create<EthercatState>((set, get) => {
   let cleanupEmergency: (() => void) | null = null;
 
   const setupListeners = () => {
-    cleanupPdo = window.api?.ecat?.onPdoData?.((slave, input, output) => {
+    cleanupPdo = window.api?.ethercat?.onPdoData?.((slave: number, input: any, output: any) => {
       set((s) => ({
         slaves: s.slaves.map((sl) =>
           sl.index === slave ? { ...sl, inputData: input, outputData: output } : sl
         ),
       }));
     });
-    cleanupWkc = window.api?.ecat?.onWkcError?.((expected, actual) => {
+    cleanupWkc = window.api?.ethercat?.onWkcError?.((expected: number, actual: number) => {
       set({ wkcError: { expected, actual } });
     });
-    cleanupState = window.api?.ecat?.onStateChange?.((session) => {
+    cleanupState = window.api?.ethercat?.onStateChange?.((session: any) => {
       set({ session });
     });
-    cleanupEmergency = window.api?.ecat?.onEmergency?.((msg) => {
+    cleanupEmergency = window.api?.ethercat?.onEmergency?.((msg: any) => {
       set((s) => ({
         emergencyMessages: [...s.emergencyMessages, msg as EmergencyMsgUI].slice(-200),
       }));
@@ -228,7 +228,7 @@ export const useEthercatStore = create<EthercatState>((set, get) => {
 
     checkAvailability: async () => {
       try {
-        const available = await window.api.ecat.isAvailable();
+        const available = await window.api.ethercat.isAvailable();
         set({ isAvailable: available });
       } catch {
         set({ isAvailable: false });
@@ -237,7 +237,7 @@ export const useEthercatStore = create<EthercatState>((set, get) => {
 
     loadAdapters: async () => {
       try {
-        const adapters = await window.api.ecat.listAdapters();
+        const adapters = await window.api.ethercat.listAdapters();
         set({ adapters, selectedAdapter: adapters[0]?.name ?? '' });
       } catch (err) {
         set({ error: (err as Error).message });
@@ -251,10 +251,9 @@ export const useEthercatStore = create<EthercatState>((set, get) => {
       if (!selectedAdapter) return;
       set({ error: null });
       try {
-        const session = await window.api.ecat.connect(selectedAdapter);
+        const session = await window.api.ethercat.connect(selectedAdapter);
         set({ session });
         setupListeners();
-        // 自动刷新从站列表
         await get().refreshSlaves();
       } catch (err) {
         set({ error: (err as Error).message });
@@ -265,7 +264,7 @@ export const useEthercatStore = create<EthercatState>((set, get) => {
       try {
         const { pdoRunning } = get();
         if (pdoRunning) await get().stopPdo();
-        await window.api.ecat.disconnect();
+        await window.api.ethercat.disconnect();
         teardownListeners();
         set({ session: null, slaves: [], selectedSlaveIndex: null, pdoRunning: false, wkcError: null, errorCounters: new Map(), pdoSignals: new Map(), chartSignals: new Set(), chartData: new Map(), chartPaused: false, emergencyMessages: [], foeProgress: null, siiData: new Map() });
       } catch (err) {
@@ -275,7 +274,7 @@ export const useEthercatStore = create<EthercatState>((set, get) => {
 
     refreshSlaves: async () => {
       try {
-        const slaves = await window.api.ecat.getSlaves();
+        const slaves = await window.api.ethercat.getSlaves();
         set({
           slaves: slaves.map((s: any) => ({
             ...s,
@@ -292,7 +291,7 @@ export const useEthercatStore = create<EthercatState>((set, get) => {
 
     requestState: async (slaveIndex, state) => {
       try {
-        const result = await window.api.ecat.requestState(slaveIndex, state);
+        const result = await window.api.ethercat.requestState(slaveIndex, state);
         if (!result.success) {
           set({ error: `状态切换失败: 实际状态 0x${result.actualState.toString(16)}, AL Status: 0x${(result.alStatusCode ?? 0).toString(16)}` });
         }
@@ -304,12 +303,10 @@ export const useEthercatStore = create<EthercatState>((set, get) => {
 
     sdoRead: async (slaveIndex, index, subIndex, size) => {
       try {
-        const result = await window.api.ecat.sdoRead(slaveIndex, index, subIndex, size);
+        const result = await window.api.ethercat.sdoRead(slaveIndex, index, subIndex, size);
         const item: SdoHistoryItem = {
           timestamp: Date.now(),
-          slaveIndex,
-          index,
-          subIndex,
+          slaveIndex, index, subIndex,
           operation: 'read',
           dataHex: result.data ? result.data.map((b: number) => b.toString(16).padStart(2, '0')).join('') : '',
           success: result.success,
@@ -323,12 +320,10 @@ export const useEthercatStore = create<EthercatState>((set, get) => {
 
     sdoWrite: async (slaveIndex, index, subIndex, dataHex, dataType) => {
       try {
-        const result = await window.api.ecat.sdoWrite(slaveIndex, index, subIndex, dataHex, dataType);
+        const result = await window.api.ethercat.sdoWrite(slaveIndex, index, subIndex, dataHex, dataType);
         const item: SdoHistoryItem = {
           timestamp: Date.now(),
-          slaveIndex,
-          index,
-          subIndex,
+          slaveIndex, index, subIndex,
           operation: 'write',
           dataHex,
           success: result.success,
@@ -342,7 +337,7 @@ export const useEthercatStore = create<EthercatState>((set, get) => {
 
     startPdo: async (intervalMs) => {
       try {
-        await window.api.ecat.startPdo(intervalMs ?? get().pdoInterval);
+        await window.api.ethercat.startPdo(intervalMs ?? get().pdoInterval);
         set({ pdoRunning: true, wkcError: null });
       } catch (err) {
         set({ error: (err as Error).message });
@@ -351,7 +346,7 @@ export const useEthercatStore = create<EthercatState>((set, get) => {
 
     stopPdo: async () => {
       try {
-        await window.api.ecat.stopPdo();
+        await window.api.ethercat.stopPdo();
         set({ pdoRunning: false });
       } catch (err) {
         set({ error: (err as Error).message });
@@ -360,7 +355,7 @@ export const useEthercatStore = create<EthercatState>((set, get) => {
 
     importEsi: async (xmlContent) => {
       try {
-        const device = await window.api.ecat.importEsi(xmlContent);
+        const device = await window.api.ethercat.importEsi(xmlContent);
         set((s) => {
           const map = new Map(s.esiDevices);
           map.set(`${device.vendorId}:${device.productCode}`, device as any);
@@ -373,7 +368,7 @@ export const useEthercatStore = create<EthercatState>((set, get) => {
 
     scanOd: async (slaveIndex) => {
       try {
-        const entries = await window.api.ecat.scanOd(slaveIndex);
+        const entries = await window.api.ethercat.scanOd(slaveIndex);
         set((s) => {
           const map = new Map(s.odEntries);
           map.set(slaveIndex, entries as any);
@@ -386,7 +381,7 @@ export const useEthercatStore = create<EthercatState>((set, get) => {
 
     loadErrorCounters: async (slaveIndex) => {
       try {
-        const counters = await window.api.ecat.getErrorCounters(slaveIndex);
+        const counters = await window.api.ethercat.getErrorCounters(slaveIndex);
         set((s) => {
           const map = new Map(s.errorCounters);
           map.set(slaveIndex, counters as ErrorCountersUI);
@@ -399,7 +394,7 @@ export const useEthercatStore = create<EthercatState>((set, get) => {
 
     clearErrorCounters: async (slaveIndex) => {
       try {
-        await window.api.ecat.clearErrorCounters(slaveIndex);
+        await window.api.ethercat.clearErrorCounters(slaveIndex);
         set((s) => {
           const map = new Map(s.errorCounters);
           map.set(slaveIndex, { invalidFrame: [0, 0, 0, 0], rxError: [0, 0, 0, 0], lostLink: [0, 0, 0, 0] });
@@ -412,7 +407,7 @@ export const useEthercatStore = create<EthercatState>((set, get) => {
 
     resolvePdoSignals: async (slaveIndex) => {
       try {
-        const signals = await window.api.ecat.resolvePdoSignals(slaveIndex);
+        const signals = await window.api.ethercat.resolvePdoSignals(slaveIndex);
         set((s) => {
           const map = new Map(s.pdoSignals);
           map.set(slaveIndex, signals as PdoSignalUI[]);
@@ -432,7 +427,7 @@ export const useEthercatStore = create<EthercatState>((set, get) => {
           data.delete(key);
           return { chartSignals: next, chartData: data };
         }
-        if (next.size >= 4) return s; // 最多 4 个
+        if (next.size >= 4) return s;
         next.add(key);
         return { chartSignals: next };
       });
@@ -454,7 +449,7 @@ export const useEthercatStore = create<EthercatState>((set, get) => {
 
     writeOutputPdo: async (slaveIndex, offset, data) => {
       try {
-        await window.api.ecat.writeOutputPdo(slaveIndex, offset, data);
+        await window.api.ethercat.writeOutputPdo(slaveIndex, offset, data);
       } catch (err) {
         set({ error: (err as Error).message });
       }
@@ -463,10 +458,10 @@ export const useEthercatStore = create<EthercatState>((set, get) => {
     foeUpload: async (slaveIndex, filename, data, password) => {
       try {
         set({ foeProgress: 0 });
-        const cleanup = window.api.ecat.onFoeProgress?.((percent: number) => {
+        const cleanup = window.api.ethercat.onFoeProgress?.((percent: number) => {
           set({ foeProgress: percent });
         });
-        const result = await window.api.ecat.foeUpload(slaveIndex, filename, data, password);
+        const result = await window.api.ethercat.foeUpload(slaveIndex, filename, data, password);
         cleanup?.();
         set({ foeProgress: null });
         if (!result.success) {
@@ -479,7 +474,7 @@ export const useEthercatStore = create<EthercatState>((set, get) => {
 
     siiRead: async (slaveIndex) => {
       try {
-        const data = await window.api.ecat.siiRead(slaveIndex, 0, 256);
+        const data = await window.api.ethercat.siiRead(slaveIndex, 0, 256);
         set((s) => {
           const map = new Map(s.siiData);
           map.set(slaveIndex, data);
@@ -492,7 +487,7 @@ export const useEthercatStore = create<EthercatState>((set, get) => {
 
     siiWrite: async (slaveIndex, data) => {
       try {
-        await window.api.ecat.siiWrite(slaveIndex, 0, data);
+        await window.api.ethercat.siiWrite(slaveIndex, 0, data);
       } catch (err) {
         set({ error: (err as Error).message });
       }

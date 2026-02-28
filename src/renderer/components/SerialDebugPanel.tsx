@@ -2,7 +2,10 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useSerialStore, hexDecode } from '../store/serial-store';
 import type { ModbusLogEntry } from '../store/serial-store';
 import { useT } from '../i18n';
-import type { SerialConfig, NetDataEncoding, SerialMessage } from '../../shared/types';
+import type { NetDataEncoding, SerialMessage } from '../../shared/types';
+
+// ── Extension ID constant ──
+
 
 function StatusDot({ status }: { status: string }) {
   const color =
@@ -41,6 +44,7 @@ function OpenPortForm({ onOpened }: { onOpened: () => void }) {
   const [stopBits, setStopBits] = useState<1|1.5|2>(1);
   const [parity, setParity] = useState<'none'|'even'|'odd'>('none');
   const [flowControl, setFlowControl] = useState<'none'|'rtscts'|'xonxoff'>('none');
+
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -153,7 +157,8 @@ function SerialSendTemplatePanel({ sessionId }: { sessionId: string }) {
         ) : (
           <div className="text-[11px] flex flex-col min-h-0">
             <div className="flex items-center gap-1.5 px-2 py-0.5 text-[9px] flex-shrink-0" style={{ color: 'var(--color-text-dim)', borderBottom: '1px solid var(--color-border)' }}>
-              <span className="w-12"></span>
+              <span className="w-6"></span>
+              <span className="w-6"></span>
               <span className="w-20">{t('tpl.name')}</span>
               <span className="w-16">{t('tpl.encoding')}</span>
               <span className="flex-1">{t('tpl.data')}</span>
@@ -196,6 +201,7 @@ function SerialSendTemplatePanel({ sessionId }: { sessionId: string }) {
   );
 }
 
+
 /* ─── Modbus RTU helpers ─── */
 const MODBUS_FC: Record<number, string> = {
   1: 'Read Coils', 2: 'Read Discrete Inputs',
@@ -237,39 +243,32 @@ function parseModbusResponse(bytes: number[]): { slave: number; fc: number; deta
   if (bytes.length < 4) return { slave: 0, fc: 0, detail: 'Frame too short', isError: true };
   const slave = bytes[0];
   const fc = bytes[1];
-  // Verify CRC
   const payload = bytes.slice(0, -2);
   const rxCrc = bytes[bytes.length - 2] | (bytes[bytes.length - 1] << 8);
   const calcCrc = crc16modbus(payload);
   if (rxCrc !== calcCrc) return { slave, fc, detail: `CRC error (rx=${rxCrc.toString(16)} calc=${calcCrc.toString(16)})`, isError: true };
-  // Exception response
   if (fc & 0x80) {
     const excCode = bytes[2];
     const excNames: Record<number, string> = { 1: 'Illegal Function', 2: 'Illegal Data Address', 3: 'Illegal Data Value', 4: 'Slave Device Failure' };
     return { slave, fc: fc & 0x7F, detail: `Exception ${excCode}: ${excNames[excCode] || 'Unknown'}`, isError: true };
   }
-  // FC 01-04: read response
   if (fc >= 1 && fc <= 4) {
     const byteCount = bytes[2];
     const data = bytes.slice(3, 3 + byteCount);
     if (fc <= 2) {
-      // Coils / discrete inputs — show as bits
       return { slave, fc, detail: data.map((b) => b.toString(2).padStart(8, '0')).join(' '), isError: false };
     }
-    // Registers — show as 16-bit values
     const regs: string[] = [];
     for (let i = 0; i < data.length; i += 2) {
       regs.push('0x' + ((data[i] << 8) | (data[i + 1] || 0)).toString(16).padStart(4, '0'));
     }
     return { slave, fc, detail: regs.join(' '), isError: false };
   }
-  // FC 05/06: write single
   if (fc === 5 || fc === 6) {
     const addr = (bytes[2] << 8) | bytes[3];
     const val = (bytes[4] << 8) | bytes[5];
     return { slave, fc, detail: `@${addr} = ${val}`, isError: false };
   }
-  // FC 15/16: write multiple
   if (fc === 15 || fc === 16) {
     const addr = (bytes[2] << 8) | bytes[3];
     const qty = (bytes[4] << 8) | bytes[5];
@@ -286,7 +285,6 @@ interface ModbusWatchItem {
   hexValue: string;
 }
 
-/** Module-level poll state that survives component remounts */
 interface ModbusPollState {
   handle: ReturnType<typeof setInterval>;
   watchSlave: number;
@@ -296,6 +294,7 @@ interface ModbusPollState {
   watchItems: ModbusWatchItem[];
 }
 const modbusPollStates = new Map<string, ModbusPollState>();
+
 
 function ModbusRtuView({ sessionId, active }: { sessionId: string; active: boolean }) {
   const t = useT();
@@ -316,7 +315,6 @@ function ModbusRtuView({ sessionId, active }: { sessionId: string; active: boole
   const rxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const logsEndRef = useRef<HTMLDivElement>(null);
 
-  // Watch table — restore from module-level state if poll was running
   const existingPoll = modbusPollStates.get(sessionId);
   const [watchItems, setWatchItems] = useState<ModbusWatchItem[]>(existingPoll?.watchItems || []);
   const [watchSlave, setWatchSlave] = useState(existingPoll?.watchSlave ?? 1);
@@ -333,24 +331,22 @@ function ModbusRtuView({ sessionId, active }: { sessionId: string; active: boole
     color: 'var(--color-text-primary)',
   };
 
-  // Auto-scroll logs
   useEffect(() => {
     const container = logsEndRef.current?.parentElement;
     if (container) container.scrollTop = container.scrollHeight;
   }, [logs.length]);
 
-  // Listen for serial data and accumulate into rxBuffer, parse after silence
+  // Listen for serial data
   useEffect(() => {
     if (!session || session.status !== 'open') return;
-    const unsub = window.api.serial.onData(sessionId, (hexData) => {
-      if (!activeRef.current) return; // skip processing when not in Modbus mode
+    const unsub = window.api.serial.onData(sessionId, (hexData: string) => {
+      if (!activeRef.current) return;
       rxBufferRef.current += hexData;
       if (rxTimerRef.current) clearTimeout(rxTimerRef.current);
-      // Wait for 50ms silence to consider frame complete (Modbus RTU uses 3.5 char gap)
       rxTimerRef.current = setTimeout(() => {
         const frameHex = rxBufferRef.current;
         rxBufferRef.current = '';
-        if (frameHex.length < 8) return; // minimum 4 bytes
+        if (frameHex.length < 8) return;
         const bytes = hexToBytes(frameHex);
         const parsed = parseModbusResponse(bytes);
         const entry: ModbusLogEntry = {
@@ -364,7 +360,6 @@ function ModbusRtuView({ sessionId, active }: { sessionId: string; active: boole
         };
         appendModbusLog(sessionId, entry);
 
-        // Update watch table if this is a FC03/04 response
         if (!parsed.isError && (parsed.fc === 3 || parsed.fc === 4)) {
           const dataBytes = bytes.slice(3, 3 + bytes[2]);
           setWatchItems((prev) => {
@@ -402,11 +397,9 @@ function ModbusRtuView({ sessionId, active }: { sessionId: string; active: boole
     return () => { unsub(); if (rxTimerRef.current) clearTimeout(rxTimerRef.current); };
   }, [sessionId, session?.status]);
 
-  // Track latest poll config in ref for unmount save
   const pollConfigRef = useRef({ watchSlave, watchStartAddr, watchCount, pollInterval, watchItems });
   pollConfigRef.current = { watchSlave, watchStartAddr, watchCount, pollInterval, watchItems };
 
-  // On unmount: save poll state externally if polling, otherwise clean up
   useEffect(() => {
     return () => {
       if (pollRef.current) {
@@ -440,7 +433,6 @@ function ModbusRtuView({ sessionId, active }: { sessionId: string; active: boole
 
   const handleSendRequest = () => {
     if (fc === 5) {
-      // Write single coil: value must be 0xFF00 (ON) or 0x0000 (OFF)
       const coilVal = writeValue ? 0xFF00 : 0x0000;
       sendModbus(buildModbusRequest(slave, fc, startAddr, coilVal));
     } else if (fc === 6) {
@@ -602,6 +594,7 @@ function ModbusRtuView({ sessionId, active }: { sessionId: string; active: boole
   );
 }
 
+
 function SessionView({ sessionId }: { sessionId: string }) {
   const t = useT();
   const session = useSerialStore((s) => s.sessions.find((ss) => ss.id === sessionId));
@@ -693,7 +686,6 @@ function SessionView({ sessionId }: { sessionId: string }) {
           {session.status}
         </span>
 
-        {/* DTR / RTS toggles */}
         {isOpen && (
           <>
             <button onClick={() => setDTR(sessionId, !session.dtr)}
@@ -792,12 +784,12 @@ function SessionView({ sessionId }: { sessionId: string }) {
         ))}
       </div>
 
-      {/* Modbus RTU view — always mounted, hidden via CSS */}
+      {/* Modbus RTU view */}
       <div className={viewMode === 'modbus' ? 'flex-1 flex flex-col overflow-hidden min-h-0' : 'hidden'}>
         <ModbusRtuView sessionId={sessionId} active={viewMode === 'modbus'} />
       </div>
 
-      {/* Raw data view — always mounted, hidden via CSS */}
+      {/* Raw data view */}
       <div className={viewMode === 'raw' ? 'flex-1 flex flex-col overflow-hidden min-h-0' : 'hidden'}>
       {/* Messages */}
       <div className="flex-1 min-h-0 overflow-y-auto" style={{ backgroundColor: 'var(--color-surface)' }}>

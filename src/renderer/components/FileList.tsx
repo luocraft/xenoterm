@@ -190,7 +190,8 @@ export default function FileList({
                     onDoubleClick={() => handleDoubleClick(file)}
                     onClick={(e) => onSelect?.(file, e.ctrlKey || e.metaKey)}
                     onContextMenu={(e) => handleRowContextMenu(e, file)}
-                    className={`cursor-pointer transition-colors ${isSelected ? 'bg-[var(--color-accent)]/15' : ''}`}
+                    className="cursor-pointer transition-colors"
+                    style={isSelected ? { backgroundColor: 'var(--color-accent-bg, rgba(99,102,241,0.15))' } : undefined}
                     onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.backgroundColor = 'var(--color-hover-bg)'; }}
                     onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.backgroundColor = ''; }}>
                     <td className="px-2 py-1 truncate max-w-[200px]">

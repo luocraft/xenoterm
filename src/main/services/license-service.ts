@@ -40,6 +40,8 @@ interface LicenseData {
   machineId?: string;
   signature?: string;
   trialStart?: string; // ISO date string
+  extensions?: string[];    // Licensed extension IDs
+  bundles?: string[];       // Purchased bundle IDs
 }
 
 function getLicensePath(): string {
@@ -204,4 +206,61 @@ export function getLicenseStatus(): {
     daysLeft: trial.daysLeft,
     expired: trial.expired,
   };
+}
+
+// ============ Extension License ============
+
+export function isExtensionLicensed(extensionId: string): boolean {
+  // During trial, all extensions are available
+  const trial = getTrialInfo();
+  if (trial.isTrialing) return true;
+
+  // If fully licensed (legacy key), all extensions available
+  if (isLicensed()) return true;
+
+  // Check per-extension license
+  const data = readLicenseData();
+  return (data.extensions ?? []).includes(extensionId);
+}
+
+export function addExtensionLicense(extensionId: string): void {
+  const data = readLicenseData();
+  if (!data.extensions) data.extensions = [];
+  if (!data.extensions.includes(extensionId)) {
+    data.extensions.push(extensionId);
+  }
+  // Re-sign the data
+  data.signature = signLicenseData(data);
+  writeLicenseData(data);
+}
+
+export function addBundleLicense(bundleId: string, extensionIds: string[]): void {
+  const data = readLicenseData();
+  if (!data.bundles) data.bundles = [];
+  if (!data.bundles.includes(bundleId)) {
+    data.bundles.push(bundleId);
+  }
+  if (!data.extensions) data.extensions = [];
+  for (const id of extensionIds) {
+    if (!data.extensions.includes(id)) {
+      data.extensions.push(id);
+    }
+  }
+  data.signature = signLicenseData(data);
+  writeLicenseData(data);
+}
+
+export function getLicensedExtensions(): string[] {
+  const data = readLicenseData();
+  return data.extensions ?? [];
+}
+
+function signLicenseData(data: LicenseData): string {
+  const payload = JSON.stringify({
+    licenseKey: data.licenseKey,
+    machineId: data.machineId,
+    extensions: data.extensions,
+    bundles: data.bundles
+  });
+  return crypto.createHmac('sha256', LICENSE_SECRET).update(payload).digest('hex');
 }

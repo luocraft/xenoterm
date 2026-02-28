@@ -1,28 +1,26 @@
 import { ipcMain, dialog, BrowserWindow } from 'electron';
-import type { HostEntry, AppConfig, NetProtocol, SerialConfig } from '../../shared/types';
+import type { HostEntry, AppConfig } from '../../shared/types';
 import { join, basename } from 'path';
-import { existsSync, readFileSync, statSync } from 'fs';
+import { existsSync, statSync } from 'fs';
 import { ConfigStore } from '../services/config-store';
 import { ConnectionManager } from '../services/connection-manager';
 import { SSHService } from '../services/ssh-service';
 import { SFTPService } from '../services/sftp-service';
 import { createTransferProgress } from '../services/sftp-utils';
-import { NetDebugService } from '../services/net-debug-service';
-import { SerialService } from '../services/serial-service';
-import { CanService } from '../services/can/can-service';
-import type { CanFrame } from '../services/can/can-driver.interface';
-import { EthercatService } from '../services/ethercat/ethercat-service';
-import type { EcSession } from '../services/ethercat/types';
 import * as licenseService from '../services/license-service';
+import { SerialService } from '../services/serial-service';
+import { NetDebugService } from '../services/net-debug-service';
+import { CanService } from '../services/can/can-service';
+import { EthercatService } from '../services/ethercat/ethercat-service';
 
 const configStore = new ConfigStore();
 const connectionManager = new ConnectionManager(configStore);
 const sshService = new SSHService();
 const sftpService = new SFTPService();
-const netDebugService = new NetDebugService();
 const serialService = new SerialService();
+const netDebugService = new NetDebugService();
 const canService = new CanService();
-const ecatService = new EthercatService();
+const ethercatService = new EthercatService();
 
 // Wire up host resolver for jump host support
 sshService.setHostResolver((id) => connectionManager.getHost(id));
@@ -349,6 +347,28 @@ export function registerIpcHandlers(): void {
     }
   });
 
+  ipcMain.handle('sftp:uploadDir', async (_event, sessionId: string, localPath: string, remotePath: string) => {
+    try {
+      const client = sshService.getSFTPClient(sessionId);
+      if (!client) throw new Error('Session not connected');
+      const results = await sftpService.uploadDirectory(client, localPath, remotePath);
+      return results.map((r) => r.transferId);
+    } catch (err) {
+      throw new Error(`SFTP upload directory failed: ${(err as Error).message}`);
+    }
+  });
+
+  ipcMain.handle('sftp:downloadDir', async (_event, sessionId: string, remotePath: string, localPath: string) => {
+    try {
+      const client = sshService.getSFTPClient(sessionId);
+      if (!client) throw new Error('Session not connected');
+      const results = await sftpService.downloadDirectory(client, remotePath, localPath);
+      return results.map((r) => r.transferId);
+    } catch (err) {
+      throw new Error(`SFTP download directory failed: ${(err as Error).message}`);
+    }
+  });
+
   ipcMain.handle('sftp:chmod', async (_event, sessionId: string, remotePath: string, mode: number) => {
     try {
       const client = sshService.getSFTPClient(sessionId);
@@ -383,6 +403,11 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('shell:showItemInFolder', async (_event, fullPath: string) => {
     const { shell } = require('electron');
     shell.showItemInFolder(fullPath);
+  });
+
+  ipcMain.handle('shell:openPath', async (_event, fullPath: string) => {
+    const { shell } = require('electron');
+    return shell.openPath(fullPath);
   });
 
   // === Dialog handlers ===
@@ -480,41 +505,24 @@ export function registerIpcHandlers(): void {
     return homedir();
   });
 
-  // === Net Debug handlers ===
-  ipcMain.handle('net:create', async (_event, protocol: NetProtocol, host: string, port: number, localPort?: number) => {
-    try {
-      const session = await netDebugService.createSession(protocol, host, port, localPort);
-      const win = getMainWindow();
-
-      netDebugService.onData(session.id, (data, remote) => {
-        win?.webContents.send('net:data', session.id, data.toString('hex'), remote);
-      });
-
-      netDebugService.onClose(session.id, () => {
-        win?.webContents.send('net:close', session.id);
-      });
-
-      netDebugService.onError(session.id, (error) => {
-        win?.webContents.send('net:error', session.id, error);
-      });
-
-      netDebugService.onClientChange(session.id, (clients) => {
-        win?.webContents.send('net:clients', session.id, clients);
-      });
-
-      return session;
-    } catch (err) {
-      throw new Error(`Net debug failed: ${(err as Error).message}`);
+  ipcMain.handle('local:ensureXtDownload', async () => {
+    const { homedir } = await import('os');
+    const { join } = await import('path');
+    const { mkdirSync, existsSync } = await import('fs');
+    const desktop = join(homedir(), 'Desktop', 'xtdownload');
+    if (!existsSync(desktop)) {
+      mkdirSync(desktop, { recursive: true });
     }
+    return desktop;
   });
 
-  ipcMain.handle('net:close', async (_event, sessionId: string) => {
-    netDebugService.close(sessionId);
-  });
-
-  ipcMain.on('net:send', (_event, sessionId: string, hexData: string, remoteAddress?: string) => {
-    const buf = Buffer.from(hexData, 'hex');
-    netDebugService.send(sessionId, buf, remoteAddress);
+  ipcMain.handle('local:isDirectory', async (_event, filePath: string) => {
+    const { statSync } = await import('fs');
+    try {
+      return statSync(filePath).isDirectory();
+    } catch {
+      return false;
+    }
   });
 
   // === Recording (stream to file) handlers ===
@@ -559,34 +567,22 @@ export function registerIpcHandlers(): void {
 
   // === Serial Port handlers ===
   ipcMain.handle('serial:list', async () => {
-    try {
-      return await serialService.listPorts();
-    } catch (err) {
-      throw new Error(`Failed to list serial ports: ${(err as Error).message}`);
-    }
+    return serialService.listPorts();
   });
 
-  ipcMain.handle('serial:open', async (_event, config: SerialConfig) => {
-    try {
-      const session = await serialService.open(config);
-      const win = getMainWindow();
-
-      serialService.onData(session.id, (data) => {
-        win?.webContents.send('serial:data', session.id, data.toString('hex'));
-      });
-
-      serialService.onClose(session.id, () => {
-        win?.webContents.send('serial:close', session.id);
-      });
-
-      serialService.onError(session.id, (error) => {
-        win?.webContents.send('serial:error', session.id, error);
-      });
-
-      return session;
-    } catch (err) {
-      throw new Error(`Failed to open serial port: ${(err as Error).message}`);
-    }
+  ipcMain.handle('serial:open', async (_event, config: any) => {
+    const session = await serialService.open(config);
+    const win = getMainWindow();
+    serialService.onData(session.id, (data) => {
+      win?.webContents.send('serial:data', session.id, data.toString('hex'));
+    });
+    serialService.onClose(session.id, () => {
+      win?.webContents.send('serial:close', session.id);
+    });
+    serialService.onError(session.id, (error) => {
+      win?.webContents.send('serial:error', session.id, error);
+    });
+    return session;
   });
 
   ipcMain.handle('serial:close', async (_event, sessionId: string) => {
@@ -598,61 +594,44 @@ export function registerIpcHandlers(): void {
     serialService.write(sessionId, buf);
   });
 
-  ipcMain.on('serial:setDTR', (_event, sessionId: string, value: boolean) => {
+  ipcMain.handle('serial:setDTR', async (_event, sessionId: string, value: boolean) => {
     serialService.setDTR(sessionId, value);
   });
 
-  ipcMain.on('serial:setRTS', (_event, sessionId: string, value: boolean) => {
+  ipcMain.handle('serial:setRTS', async (_event, sessionId: string, value: boolean) => {
     serialService.setRTS(sessionId, value);
   });
 
   // === CAN Debug handlers ===
-  ipcMain.handle('can:listDrivers', async () => {
-    return canService.listDrivers();
-  });
-
-  ipcMain.handle('can:getDeviceTypes', async (_event, driverName: string) => {
-    return canService.getDeviceTypes(driverName);
-  });
-
-  ipcMain.handle('can:open', async (_event, driverName: string, deviceType: number, deviceIndex: number, channel: number, baudRate: number, fdConfig?: { protocol?: number; mode?: number; dataBaudRate?: number; nonIso?: boolean; ch1BaudRate?: number; ch1DataBaudRate?: number }) => {
-    try {
-      const fdOpts = fdConfig ? {
-        deviceType,
-        deviceIndex,
-        channel,
-        protocol: fdConfig.protocol ?? 1,
-        mode: fdConfig.mode ?? 0,
-        baudRate,
-        dataBaudRate: fdConfig.dataBaudRate ?? 5000000,
-        ch1BaudRate: fdConfig.ch1BaudRate,
-        ch1DataBaudRate: fdConfig.ch1DataBaudRate,
-      } : undefined;
-      const result = canService.open(driverName, { deviceType, deviceIndex, channel, baudRate, ch1BaudRate: fdConfig?.ch1BaudRate }, fdOpts);
-      const win = getMainWindow();
-
-      // result may be a single session or array of sessions (GC-FD opens both channels)
-      const sessions = Array.isArray(result) ? result : [result];
-      for (const session of sessions) {
-        canService.onData(session.id, (frames) => {
-          win?.webContents.send('can:data', session.id, frames);
-        });
-        canService.onError(session.id, (error) => {
-          win?.webContents.send('can:error', session.id, error);
-        });
-      }
-
-      return result;
-    } catch (err) {
-      throw new Error(`CAN open failed: ${(err as Error).message}`);
+  ipcMain.handle('can:open', async (_event, driverName: string, deviceType: number, deviceIndex: number, channel: number, baudRate: number, fdConfig?: any) => {
+    const fdOpts = fdConfig ? {
+      deviceType, deviceIndex, channel,
+      protocol: fdConfig.protocol ?? 1,
+      mode: fdConfig.mode ?? 0,
+      baudRate,
+      dataBaudRate: fdConfig.dataBaudRate ?? 5000000,
+      ch1BaudRate: fdConfig.ch1BaudRate,
+      ch1DataBaudRate: fdConfig.ch1DataBaudRate,
+    } : undefined;
+    const result = canService.open(driverName, { deviceType, deviceIndex, channel, baudRate, ch1BaudRate: fdConfig?.ch1BaudRate }, fdOpts);
+    const win = getMainWindow();
+    const sessions = Array.isArray(result) ? result : [result];
+    for (const session of sessions) {
+      canService.onData(session.id, (frames) => {
+        win?.webContents.send('can:data', session.id, frames);
+      });
+      canService.onError(session.id, (error) => {
+        win?.webContents.send('can:error', session.id, error);
+      });
     }
+    return result;
   });
 
   ipcMain.handle('can:close', async (_event, sessionId: string) => {
     canService.close(sessionId);
   });
 
-  ipcMain.on('can:send', (_event, sessionId: string, frame: CanFrame) => {
+  ipcMain.handle('can:send', async (_event, sessionId: string, frame: any) => {
     canService.send(sessionId, [frame]);
   });
 
@@ -660,182 +639,146 @@ export function registerIpcHandlers(): void {
     return canService.parseDbcContent(content);
   });
 
-  // === CAN UDS handlers ===
   ipcMain.handle('can:udsRequest', async (_event, sessionId: string, txId: number, rxId: number, payload: number[]) => {
-    try {
-      const win = getMainWindow();
-      const resp = await canService.udsRequest(sessionId, txId, rxId, payload, (entry) => {
-        win?.webContents.send('can:udsLog', sessionId, entry);
-      });
-      return resp;
-    } catch (err) {
-      throw new Error(`UDS request failed: ${(err as Error).message}`);
-    }
+    const win = getMainWindow();
+    return canService.udsRequest(sessionId, txId, rxId, payload, (entry) => {
+      win?.webContents.send('can:udsLog', sessionId, entry);
+    });
   });
 
-  ipcMain.on('can:udsStartTesterPresent', (_event, sessionId: string, txId: number, rxId: number, intervalMs?: number) => {
+  ipcMain.handle('can:udsStartTesterPresent', async (_event, sessionId: string, txId: number, rxId: number, intervalMs?: number) => {
     canService.udsStartTesterPresent(sessionId, txId, rxId, intervalMs);
   });
 
-  ipcMain.on('can:udsStopTesterPresent', (_event, sessionId: string, txId: number, rxId: number) => {
+  ipcMain.handle('can:udsStopTesterPresent', async (_event, sessionId: string, txId: number, rxId: number) => {
     canService.udsStopTesterPresent(sessionId, txId, rxId);
   });
 
-  ipcMain.on('can:udsDestroy', (_event, sessionId: string, txId: number, rxId: number) => {
+  ipcMain.handle('can:udsDestroy', async (_event, sessionId: string, txId: number, rxId: number) => {
     canService.udsDestroy(sessionId, txId, rxId);
+  });
+
+  // === Network Debug handlers ===
+  ipcMain.handle('net:create', async (_event, protocol: string, host: string, port: number, localPort?: number) => {
+    const session = await netDebugService.createSession(protocol as any, host, port, localPort);
+    const win = getMainWindow();
+    netDebugService.onData(session.id, (data, remote) => {
+      win?.webContents.send('net:data', session.id, data.toString('hex'), remote);
+    });
+    netDebugService.onClose(session.id, () => {
+      win?.webContents.send('net:close', session.id);
+    });
+    netDebugService.onError(session.id, (error) => {
+      win?.webContents.send('net:error', session.id, error);
+    });
+    netDebugService.onClientChange(session.id, (clients) => {
+      win?.webContents.send('net:clients', session.id, clients);
+    });
+    return session;
+  });
+
+  ipcMain.handle('net:close', async (_event, sessionId: string) => {
+    netDebugService.close(sessionId);
+  });
+
+  ipcMain.on('net:send', (_event, sessionId: string, hexData: string, remoteAddress?: string) => {
+    const buf = Buffer.from(hexData, 'hex');
+    netDebugService.send(sessionId, buf, remoteAddress);
   });
 
   // === EtherCAT handlers ===
   ipcMain.handle('ecat:isAvailable', async () => {
-    return ecatService.isAvailable();
+    return ethercatService.isAvailable();
   });
 
   ipcMain.handle('ecat:listAdapters', async () => {
-    return ecatService.listAdapters();
+    return ethercatService.listAdapters();
   });
 
   ipcMain.handle('ecat:connect', async (_event, adapterName: string) => {
-    try {
-      const session = ecatService.connect(adapterName);
-      const win = getMainWindow();
-
-      ecatService.onPdoData((slaveIndex, input, output) => {
-        win?.webContents.send('ecat:pdoData', slaveIndex, input, output);
-      });
-
-      ecatService.onWkcError((expected, actual) => {
-        win?.webContents.send('ecat:wkcError', expected, actual);
-      });
-
-      ecatService.onStateChange((s: EcSession) => {
-        win?.webContents.send('ecat:stateChange', s);
-      });
-
-      ecatService.onEmergency((msg) => {
-        win?.webContents.send('ecat:emergency', msg);
-      });
-
-      return session;
-    } catch (err) {
-      throw new Error(`EtherCAT connect failed: ${(err as Error).message}`);
-    }
+    const session = ethercatService.connect(adapterName);
+    const win = getMainWindow();
+    ethercatService.onPdoData((slaveIndex, input, output) => {
+      win?.webContents.send('ecat:pdoData', slaveIndex, input, output);
+    });
+    ethercatService.onWkcError((expected, actual) => {
+      win?.webContents.send('ecat:wkcError', expected, actual);
+    });
+    ethercatService.onStateChange((s) => {
+      win?.webContents.send('ecat:stateChange', s);
+    });
+    ethercatService.onEmergency((msg) => {
+      win?.webContents.send('ecat:emergency', msg);
+    });
+    return session;
   });
 
   ipcMain.handle('ecat:disconnect', async () => {
-    ecatService.disconnect();
+    ethercatService.disconnect();
   });
 
   ipcMain.handle('ecat:getSlaves', async () => {
-    return ecatService.getSlaves();
+    return ethercatService.getSlaves();
   });
 
   ipcMain.handle('ecat:requestState', async (_event, slaveIndex: number, targetState: number) => {
-    try {
-      return ecatService.requestState(slaveIndex, targetState);
-    } catch (err) {
-      throw new Error(`EtherCAT state change failed: ${(err as Error).message}`);
-    }
+    return ethercatService.requestState(slaveIndex, targetState);
   });
 
   ipcMain.handle('ecat:sdoRead', async (_event, slaveIndex: number, index: number, subIndex: number, size: number) => {
-    try {
-      return ecatService.sdoRead(slaveIndex, index, subIndex, size);
-    } catch (err) {
-      throw new Error(`SDO read failed: ${(err as Error).message}`);
-    }
+    return ethercatService.sdoRead(slaveIndex, index, subIndex, size);
   });
 
   ipcMain.handle('ecat:sdoWrite', async (_event, slaveIndex: number, index: number, subIndex: number, dataHex: string, dataType: string) => {
-    try {
-      return ecatService.sdoWrite(slaveIndex, index, subIndex, dataHex, dataType);
-    } catch (err) {
-      throw new Error(`SDO write failed: ${(err as Error).message}`);
-    }
+    return ethercatService.sdoWrite(slaveIndex, index, subIndex, dataHex, dataType);
   });
 
   ipcMain.handle('ecat:startPdo', async (_event, intervalMs?: number) => {
-    ecatService.startPdoMonitor(intervalMs ?? 1);
+    ethercatService.startPdoMonitor(intervalMs ?? 1);
   });
 
   ipcMain.handle('ecat:stopPdo', async () => {
-    ecatService.stopPdoMonitor();
+    ethercatService.stopPdoMonitor();
   });
 
   ipcMain.handle('ecat:importEsi', async (_event, xmlContent: string) => {
-    try {
-      return ecatService.importEsi(xmlContent);
-    } catch (err) {
-      throw new Error(`ESI import failed: ${(err as Error).message}`);
-    }
+    return ethercatService.importEsi(xmlContent);
   });
 
   ipcMain.handle('ecat:scanOd', async (_event, slaveIndex: number) => {
-    try {
-      return ecatService.scanObjectDictionary(slaveIndex);
-    } catch (err) {
-      throw new Error(`OD scan failed: ${(err as Error).message}`);
-    }
+    return ethercatService.scanObjectDictionary(slaveIndex);
   });
 
   ipcMain.handle('ecat:getErrorCounters', async (_event, slaveIndex: number) => {
-    try {
-      return ecatService.getErrorCounters(slaveIndex);
-    } catch (err) {
-      throw new Error(`Error counters read failed: ${(err as Error).message}`);
-    }
+    return ethercatService.getErrorCounters(slaveIndex);
   });
 
   ipcMain.handle('ecat:clearErrorCounters', async (_event, slaveIndex: number) => {
-    try {
-      ecatService.clearErrorCounters(slaveIndex);
-    } catch (err) {
-      throw new Error(`Error counters clear failed: ${(err as Error).message}`);
-    }
+    ethercatService.clearErrorCounters(slaveIndex);
   });
 
   ipcMain.handle('ecat:resolvePdoSignals', async (_event, slaveIndex: number) => {
-    try {
-      return ecatService.resolvePdoSignals(slaveIndex);
-    } catch (err) {
-      throw new Error(`PDO signal resolve failed: ${(err as Error).message}`);
-    }
+    return ethercatService.resolvePdoSignals(slaveIndex);
   });
 
   ipcMain.handle('ecat:writeOutputPdo', async (_event, slaveIndex: number, offset: number, data: number[]) => {
-    try {
-      ecatService.writeOutputPdo(slaveIndex, offset, data);
-    } catch (err) {
-      throw new Error(`PDO write failed: ${(err as Error).message}`);
-    }
+    ethercatService.writeOutputPdo(slaveIndex, offset, data);
   });
 
   ipcMain.handle('ecat:foeUpload', async (_event, slaveIndex: number, filename: string, dataArr: number[], password: number) => {
-    try {
-      const win = getMainWindow();
-      const data = Buffer.from(dataArr);
-      const result = await ecatService.foeUpload(slaveIndex, filename, data, password, (percent) => {
-        win?.webContents.send('ecat:foeProgress', percent);
-      });
-      return result;
-    } catch (err) {
-      throw new Error(`FoE upload failed: ${(err as Error).message}`);
-    }
+    const data = Buffer.from(dataArr);
+    const win = getMainWindow();
+    return ethercatService.foeUpload(slaveIndex, filename, data, password, (percent) => {
+      win?.webContents.send('ecat:foeProgress', percent);
+    });
   });
 
   ipcMain.handle('ecat:siiRead', async (_event, slaveIndex: number, offset: number, size: number) => {
-    try {
-      return ecatService.siiRead(slaveIndex, offset, size);
-    } catch (err) {
-      throw new Error(`SII read failed: ${(err as Error).message}`);
-    }
+    return ethercatService.siiRead(slaveIndex, offset, size);
   });
 
   ipcMain.handle('ecat:siiWrite', async (_event, slaveIndex: number, offset: number, data: number[]) => {
-    try {
-      return ecatService.siiWrite(slaveIndex, offset, data);
-    } catch (err) {
-      throw new Error(`SII write failed: ${(err as Error).message}`);
-    }
+    return ethercatService.siiWrite(slaveIndex, offset, data);
   });
 
   // === License handlers ===
@@ -862,4 +805,5 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('license:queryPayment', async (_event, orderId: string) => {
     return licenseService.queryPayment(orderId);
   });
+
 }
