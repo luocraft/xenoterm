@@ -87,6 +87,8 @@
       "createStartMenuShortcut": true,
       "shortcutName": "XenoTerm",
       "runAfterFinish": true,
+      "installerIcon": "resources/icon.ico",
+      "uninstallerIcon": "resources/icon.ico",
       "installerSidebar": null,
       "uninstallerSidebar": null
     }
