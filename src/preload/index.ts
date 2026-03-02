@@ -326,7 +326,7 @@ const api = {
     }
   },
   license: {
-    getStatus: (): Promise<{ licensed: boolean; trial: boolean; daysLeft: number; expired: boolean; licenseKey?: string }> =>
+    getStatus: (): Promise<{ licensed: boolean; trial: boolean; daysLeft: number; expired: boolean; licenseKey?: string; licenseExpired?: boolean; licenseDaysLeft?: number; expiresAt?: string }> =>
       ipcRenderer.invoke('license:getStatus'),
     getMachineId: (): Promise<string> =>
       ipcRenderer.invoke('license:getMachineId'),
@@ -338,6 +338,8 @@ const api = {
       ipcRenderer.invoke('license:createPayment', payType),
     queryPayment: (orderId: string): Promise<{ success: boolean; status?: string; licenseKey?: string }> =>
       ipcRenderer.invoke('license:queryPayment', orderId),
+    renewLicense: (): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke('license:renew'),
   }
 };
 

@@ -1,18 +1,23 @@
 {
   "name": "xenoterm",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Modern SSH Client Desktop Application",
   "main": "dist/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
-    "build": "electron-vite build",
+    "build": "electron-vite build && node scripts/build-extensions.js",
     "preview": "electron-vite preview",
-    "pack": "electron-vite build && electron-builder --win --dir",
-    "dist": "electron-vite build && node scripts/build.js",
+    "pack": "electron-vite build && node scripts/build-extensions.js && electron-builder --win --dir",
+    "dist": "electron-vite build && node scripts/build-extensions.js && node scripts/build.js",
+    "build:extensions": "node scripts/build-extensions.js",
+    "build:extension": "node scripts/build-extension.js",
+    "pack:extension": "node packages/extension-sdk/scripts/pack.js",
+    "create-extension": "node packages/extension-sdk/scripts/create-extension.js",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
+    "adm-zip": "^0.5.16",
     "fast-xml-parser": "^5.3.6",
     "koffi": "^2.15.1",
     "serialport": "^13.0.0",
@@ -50,6 +55,15 @@
         "to": "can/",
         "filter": [
           "**/*.dll"
+        ]
+      },
+      {
+        "from": "extensions/",
+        "to": "extensions/",
+        "filter": [
+          "**/manifest.json",
+          "**/dist/**",
+          "**/resources/**"
         ]
       }
     ],

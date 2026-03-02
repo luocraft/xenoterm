@@ -308,6 +308,10 @@ const en = {
   'license.licensed': 'Licensed',
   'license.trialExpired': 'Trial Expired',
   'license.trialDays': 'Trial: {days}d left',
+  'license.licenseExpired': 'License Expired',
+  'license.licenseDays': 'License: {days}d left',
+  'license.expiresAt': 'Expires: {date}',
+  'license.renew': 'Renew',
   'license.buy': 'Buy',
   'license.tabStatus': 'Status',
   'license.tabActivate': 'Activate',
@@ -324,8 +328,8 @@ const en = {
   'license.activateNow': 'Activate Now',
   'license.alipay': '💙 Alipay',
   'license.wxpay': '💚 WeChat Pay',
-  'license.productName': 'XenoTerm Permanent License',
-  'license.productDesc': 'One machine · Lifetime updates',
+  'license.productName': 'XenoTerm Annual License',
+  'license.productDesc': 'One machine · 12 months of updates',
 
   // ─── CAN Debug (remaining) ───
   'can.unloadDbc': 'Unload DBC',

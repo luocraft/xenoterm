@@ -40,6 +40,7 @@ interface LicenseData {
   machineId?: string;
   signature?: string;
   trialStart?: string; // ISO date string
+  expiresAt?: string;  // ISO date string — license expiration (activation + 365 days)
   extensions?: string[];    // Licensed extension IDs
   bundles?: string[];       // Purchased bundle IDs
 }
@@ -101,7 +102,38 @@ export function isLicensed(): boolean {
   const data = readLicenseData();
   if (!data.licenseKey || !data.machineId || !data.signature) return false;
   // Offline verification
-  return verifySignatureOffline(data.licenseKey, data.machineId, data.signature);
+  if (!verifySignatureOffline(data.licenseKey, data.machineId, data.signature)) return false;
+  // Check expiration
+  if (data.expiresAt) {
+    const expires = new Date(data.expiresAt);
+    if (new Date() > expires) return false;
+  }
+  return true;
+}
+
+/** Check if license exists but has expired */
+export function isLicenseExpired(): boolean {
+  const data = readLicenseData();
+  if (!data.licenseKey || !data.machineId || !data.signature) return false;
+  if (!verifySignatureOffline(data.licenseKey, data.machineId, data.signature)) return false;
+  if (!data.expiresAt) return false;
+  return new Date() > new Date(data.expiresAt);
+}
+
+/** Get license expiration date (ISO string) or null */
+export function getLicenseExpiresAt(): string | null {
+  const data = readLicenseData();
+  return data.expiresAt || null;
+}
+
+/** Get remaining days of license, -1 if no license */
+export function getLicenseDaysLeft(): number {
+  const data = readLicenseData();
+  if (!data.expiresAt) return -1;
+  const expires = new Date(data.expiresAt);
+  const now = new Date();
+  const diff = Math.ceil((expires.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  return Math.max(0, diff);
 }
 
 export async function verifyLicenseOnline(): Promise<boolean> {
@@ -144,6 +176,14 @@ export async function activateLicense(licenseKey: string): Promise<{ success: bo
       data.licenseKey = licenseKey;
       data.machineId = machineId;
       data.signature = result.signature;
+      // Set expiration: server may return expiresAt, otherwise default to +365 days
+      if (result.expiresAt) {
+        data.expiresAt = result.expiresAt;
+      } else {
+        const expires = new Date();
+        expires.setDate(expires.getDate() + 365);
+        data.expiresAt = expires.toISOString();
+      }
       writeLicenseData(data);
       return { success: true };
     }
@@ -194,10 +234,29 @@ export function getLicenseStatus(): {
   daysLeft: number;
   expired: boolean;
   licenseKey?: string;
+  licenseExpired?: boolean;
+  licenseDaysLeft?: number;
+  expiresAt?: string;
 } {
   if (isLicensed()) {
     const data = readLicenseData();
-    return { licensed: true, trial: false, daysLeft: 0, expired: false, licenseKey: data.licenseKey };
+    return {
+      licensed: true, trial: false, daysLeft: 0, expired: false,
+      licenseKey: data.licenseKey,
+      licenseDaysLeft: getLicenseDaysLeft(),
+      expiresAt: data.expiresAt,
+    };
+  }
+  // License exists but expired
+  if (isLicenseExpired()) {
+    const data = readLicenseData();
+    return {
+      licensed: false, trial: false, daysLeft: 0, expired: true,
+      licenseKey: data.licenseKey,
+      licenseExpired: true,
+      licenseDaysLeft: 0,
+      expiresAt: data.expiresAt,
+    };
   }
   const trial = getTrialInfo();
   return {
@@ -263,4 +322,37 @@ function signLicenseData(data: LicenseData): string {
     bundles: data.bundles
   });
   return crypto.createHmac('sha256', LICENSE_SECRET).update(payload).digest('hex');
+}
+
+// ============ Renewal ============
+
+/** Renew an expired license — extends by 365 days from today */
+export async function renewLicense(): Promise<{ success: boolean; error?: string }> {
+  const data = readLicenseData();
+  if (!data.licenseKey || !data.machineId) {
+    return { success: false, error: 'No license to renew' };
+  }
+  try {
+    const res = await fetch(`${LICENSE_SERVER}/api/license/renew`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ licenseKey: data.licenseKey, machineId: data.machineId }),
+    });
+    const result = await res.json();
+    if (result.success) {
+      if (result.expiresAt) {
+        data.expiresAt = result.expiresAt;
+      } else {
+        const expires = new Date();
+        expires.setDate(expires.getDate() + 365);
+        data.expiresAt = expires.toISOString();
+      }
+      if (result.signature) data.signature = result.signature;
+      writeLicenseData(data);
+      return { success: true };
+    }
+    return { success: false, error: result.error };
+  } catch (err: any) {
+    return { success: false, error: 'Network error: ' + err.message };
+  }
 }

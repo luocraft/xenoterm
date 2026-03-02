@@ -806,4 +806,8 @@ export function registerIpcHandlers(): void {
     return licenseService.queryPayment(orderId);
   });
 
+  ipcMain.handle('license:renew', async () => {
+    return licenseService.renewLicense();
+  });
+
 }

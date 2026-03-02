@@ -607,20 +607,29 @@ export default function TerminalView({ sessionId }: TerminalViewProps) {
       }
       if (e.ctrlKey && e.shiftKey && e.key === 'V') {
         const text = window.api.clipboard.readText();
-        if (text) window.api.ssh.write(sessionId, text);
+        if (text) {
+          cached.ghostOverlay.style.display = 'none';
+          cached.ghostOverlay.textContent = '';
+          terminal.paste(text);
+        }
         e.preventDefault();
       }
     };
     container.addEventListener('keydown', handleKeyDown);
 
-    // Right-click paste — bind directly on xterm's internal textarea for reliable capture
+    // Right-click paste — use terminal.paste() so it goes through onData callback
+    // which properly updates lineBuffer and clears ghost suggestion
     const handleContextMenu = (e: Event) => {
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
       const text = window.api.clipboard.readText();
       if (text) {
-        window.api.ssh.write(sessionId, text);
+        cached.ghostOverlay.style.display = 'none';
+        cached.ghostOverlay.textContent = '';
+        // Use terminal.paste() — this triggers terminal.onData with the pasted text,
+        // so lineBuffer gets updated and ghost is properly cleared
+        terminal.paste(text);
         terminal.focus();
       }
     };

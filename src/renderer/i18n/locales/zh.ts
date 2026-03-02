@@ -308,6 +308,10 @@ const zh = {
   'license.licensed': '已授权',
   'license.trialExpired': '试用已过期',
   'license.trialDays': '试用: 剩余 {days} 天',
+  'license.licenseExpired': '许可证已过期',
+  'license.licenseDays': '许可证: 剩余 {days} 天',
+  'license.expiresAt': '到期时间: {date}',
+  'license.renew': '续费',
   'license.buy': '购买',
   'license.tabStatus': '状态',
   'license.tabActivate': '激活',
@@ -324,8 +328,8 @@ const zh = {
   'license.activateNow': '立即激活',
   'license.alipay': '💙 支付宝',
   'license.wxpay': '💚 微信支付',
-  'license.productName': 'XenoTerm 永久许可证',
-  'license.productDesc': '单机 · 终身更新',
+  'license.productName': 'XenoTerm 年度许可证',
+  'license.productDesc': '单机 · 12个月更新',
 
   // ─── CAN Debug (remaining) ───
   'can.unloadDbc': '卸载DBC',

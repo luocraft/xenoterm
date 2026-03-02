@@ -6,6 +6,9 @@ interface LicenseStatus {
   daysLeft: number;
   expired: boolean;
   licenseKey?: string;
+  licenseExpired?: boolean;
+  licenseDaysLeft?: number;
+  expiresAt?: string;
 }
 
 // ============ License Status Bar (shown in Sidebar) ============
@@ -25,7 +28,25 @@ export function LicenseStatusBar({ onClick }: { onClick: () => void }) {
       <button onClick={onClick}
         className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left transition-colors hover:bg-[var(--color-hover-bg)]">
         <span className="text-xs">✅</span>
-        <span className="text-[10px] font-medium" style={{ color: 'var(--color-text-dim)' }}>{t('license.licensed')}</span>
+        <span className="text-[10px] font-medium" style={{ color: 'var(--color-text-dim)' }}>
+          {t('license.licensed')}
+          {status.licenseDaysLeft != null && status.licenseDaysLeft <= 30 && (
+            <span style={{ color: '#ef4444', marginLeft: 4 }}>({status.licenseDaysLeft}d)</span>
+          )}
+        </span>
+      </button>
+    );
+  }
+
+  if (status.licenseExpired) {
+    return (
+      <button onClick={onClick}
+        className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left transition-colors"
+        style={{ backgroundColor: '#ef444415' }}>
+        <span className="text-xs">⚠️</span>
+        <span className="text-[10px] font-medium" style={{ color: '#ef4444' }}>{t('license.licenseExpired')}</span>
+        <span className="ml-auto text-[9px] px-1.5 py-0.5 rounded-full font-medium"
+          style={{ backgroundColor: '#ef444420', color: '#ef4444' }}>{t('license.renew')}</span>
       </button>
     );
   }
@@ -180,7 +201,7 @@ export function LicenseDialog({ onClose }: { onClose: () => void }) {
 
         {/* Content */}
         <div className="p-4 overflow-y-auto flex-1">
-          {tab === 'status' && status && <StatusTab status={status} machineId={machineId} />}
+          {tab === 'status' && status && <StatusTab status={status} machineId={machineId} onRenew={() => setTab('buy')} />}
           {tab === 'activate' && (
             <ActivateTab
               activateKey={activateKey}
@@ -211,7 +232,7 @@ export function LicenseDialog({ onClose }: { onClose: () => void }) {
 
 // ============ Tab: Status ============
 
-function StatusTab({ status, machineId }: { status: LicenseStatus; machineId: string }) {
+function StatusTab({ status, machineId, onRenew }: { status: LicenseStatus; machineId: string; onRenew: () => void }) {
   const t = useT();
   const [copied, setCopied] = useState(false);
 
@@ -226,17 +247,38 @@ function StatusTab({ status, machineId }: { status: LicenseStatus; machineId: st
       {/* License state */}
       <div className="p-3 rounded-lg" style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-border)' }}>
         <div className="flex items-center gap-2 mb-2">
-          <span className="text-base">{status.licensed ? '✅' : status.expired ? '🚫' : '⏳'}</span>
+          <span className="text-base">{status.licensed ? '✅' : (status.licenseExpired || status.expired) ? '🚫' : '⏳'}</span>
           <span className="text-xs font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-            {status.licensed ? t('license.licensed') : status.expired ? t('license.trialExpired') : 'Free Trial'}
+            {status.licensed ? t('license.licensed') : status.licenseExpired ? t('license.licenseExpired') : status.expired ? t('license.trialExpired') : 'Free Trial'}
           </span>
         </div>
         {status.licensed && status.licenseKey && (
-          <p className="text-[10px] font-mono" style={{ color: 'var(--color-text-dim)' }}>
-            Key: {status.licenseKey}
-          </p>
+          <>
+            <p className="text-[10px] font-mono" style={{ color: 'var(--color-text-dim)' }}>
+              Key: {status.licenseKey}
+            </p>
+            {status.expiresAt && (
+              <p className="text-[10px] mt-1" style={{ color: 'var(--color-text-dim)' }}>
+                {t('license.expiresAt', { date: new Date(status.expiresAt).toLocaleDateString() })}
+              </p>
+            )}
+            {status.licenseDaysLeft != null && status.licenseDaysLeft >= 0 && (
+              <div className="flex items-center gap-2 mt-1.5">
+                <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--color-border)' }}>
+                  <div className="h-full rounded-full transition-all"
+                    style={{
+                      width: `${Math.min(100, (status.licenseDaysLeft / 365) * 100)}%`,
+                      backgroundColor: status.licenseDaysLeft <= 30 ? '#ef4444' : 'var(--color-accent)',
+                    }} />
+                </div>
+                <span className="text-[10px] font-medium" style={{ color: status.licenseDaysLeft <= 30 ? '#ef4444' : 'var(--color-text-dim)' }}>
+                  {t('license.licenseDays', { days: String(status.licenseDaysLeft) })}
+                </span>
+              </div>
+            )}
+          </>
         )}
-        {!status.licensed && !status.expired && (
+        {!status.licensed && !status.expired && !status.licenseExpired && (
           <div className="flex items-center gap-2">
             <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--color-border)' }}>
               <div className="h-full rounded-full transition-all"
@@ -250,7 +292,24 @@ function StatusTab({ status, machineId }: { status: LicenseStatus; machineId: st
             </span>
           </div>
         )}
-        {status.expired && (
+        {status.licenseExpired && (
+          <div>
+            <p className="text-[10px]" style={{ color: '#ef4444' }}>
+              {t('license.licenseExpired')}
+            </p>
+            {status.licenseKey && (
+              <p className="text-[10px] font-mono mt-1" style={{ color: 'var(--color-text-dim)' }}>
+                Key: {status.licenseKey}
+              </p>
+            )}
+            <button onClick={onRenew}
+              className="mt-2 w-full py-1.5 text-xs rounded-lg text-white font-medium"
+              style={{ background: 'linear-gradient(135deg, var(--color-accent), #8b5cf6)' }}>
+              {t('license.renew')}
+            </button>
+          </div>
+        )}
+        {status.expired && !status.licenseExpired && (
           <p className="text-[10px]" style={{ color: '#ef4444' }}>
             Your trial has expired. Please purchase a license to continue using XenoTerm.
           </p>
