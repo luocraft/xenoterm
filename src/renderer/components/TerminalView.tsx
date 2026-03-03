@@ -671,3 +671,17 @@ export function disposeTerminal(sessionId: string): void {
     terminalCache.delete(sessionId);
   }
 }
+export function getTerminalSize(sessionId: string): { cols: number; rows: number } | null {
+  const cached = terminalCache.get(sessionId);
+  if (!cached) return null;
+  return { cols: cached.terminal.cols, rows: cached.terminal.rows };
+}
+
+export function refitTerminal(sessionId: string): void {
+  const cached = terminalCache.get(sessionId);
+  if (!cached) return;
+  try {
+    cached.fitAddon.fit();
+    cached.gutter.render();
+  } catch { /* ignore */ }
+}

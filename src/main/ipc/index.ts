@@ -166,13 +166,13 @@ export function registerIpcHandlers(): void {
     sshService.disconnect(sessionId);
   });
 
-  ipcMain.handle('ssh:reconnect', async (_event, sessionId: string, password?: string) => {
+  ipcMain.handle('ssh:reconnect', async (_event, sessionId: string, password?: string, cols?: number, rows?: number) => {
     try {
       console.log('[SSH] Reconnecting session:', sessionId);
       const session = await sshService.reconnect(sessionId, password);
       console.log('[SSH] Reconnected, session:', session.id, 'status:', session.status);
-      await sshService.openShell(session.id);
-      console.log('[SSH] Shell re-opened for session:', session.id);
+      await sshService.openShell(session.id, cols, rows);
+      console.log('[SSH] Shell re-opened for session:', session.id, 'size:', cols, 'x', rows);
       return session;
     } catch (err) {
       console.error('[SSH] Reconnect failed:', (err as Error).message);

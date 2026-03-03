@@ -276,37 +276,38 @@ export class SSHService {
     entry.stream.setWindow(rows, cols, 0, 0);
   }
 
-  openShell(sessionId: string): Promise<void> {
-    const entry = this.sessions.get(sessionId);
-    if (!entry || entry.session.status !== 'connected') {
-      return Promise.reject(new Error('Session not connected'));
+  openShell(sessionId: string, cols?: number, rows?: number): Promise<void> {
+      const entry = this.sessions.get(sessionId);
+      if (!entry || entry.session.status !== 'connected') {
+        return Promise.reject(new Error('Session not connected'));
+      }
+
+      return new Promise((resolve, reject) => {
+        entry.client.shell(
+          { term: 'xterm-256color', cols: cols || 80, rows: rows || 24 },
+          (err, stream) => {
+            if (err) {
+              reject(new Error(`Failed to open shell: ${err.message}`));
+              return;
+            }
+            entry.stream = stream;
+
+            stream.on('data', (data: Buffer) => {
+              const str = data.toString('utf-8');
+              entry.dataCallbacks.forEach((cb) => cb(str));
+            });
+
+            stream.on('close', () => {
+              // Client 'close' event handles closeCallbacks — no need to fire here
+              entry.stream = null;
+            });
+
+            resolve();
+          }
+        );
+      });
     }
 
-    return new Promise((resolve, reject) => {
-      entry.client.shell(
-        { term: 'xterm-256color', cols: 80, rows: 24 },
-        (err, stream) => {
-          if (err) {
-            reject(new Error(`Failed to open shell: ${err.message}`));
-            return;
-          }
-          entry.stream = stream;
-
-          stream.on('data', (data: Buffer) => {
-            const str = data.toString('utf-8');
-            entry.dataCallbacks.forEach((cb) => cb(str));
-          });
-
-          stream.on('close', () => {
-            // Client 'close' event handles closeCallbacks — no need to fire here
-            entry.stream = null;
-          });
-
-          resolve();
-        }
-      );
-    });
-  }
 
   onData(sessionId: string, callback: (data: string) => void): void {
     const entry = this.sessions.get(sessionId);

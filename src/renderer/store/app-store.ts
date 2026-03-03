@@ -180,15 +180,30 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const oldSession = state.sessions.find((s) => s.id === sessionId);
     if (!oldSession) throw new Error('Session not found');
 
+    // Get current terminal size before reconnecting
+    const { getTerminalSize, refitTerminal } = await import('../components/TerminalView');
+    const size = getTerminalSize(sessionId);
+
     // Mark as connecting
     get().updateSessionStatus(sessionId, 'connecting');
 
     try {
       // Backend reconnect: reuses same sessionId, creates new Client + shell
-      await window.api.ssh.reconnect(sessionId, password);
+      await window.api.ssh.reconnect(sessionId, password, size?.cols, size?.rows);
 
       // Update session status — terminal is still alive, data flows through existing callbacks
       get().updateSessionStatus(sessionId, 'connected');
+
+      // Re-fit terminal after reconnection to ensure PTY size matches container
+      setTimeout(() => {
+        refitTerminal(sessionId);
+        // Also explicitly send resize to backend as safety net
+        // (fitAddon.fit may not trigger onResize if terminal size hasn't changed)
+        const currentSize = getTerminalSize(sessionId);
+        if (currentSize) {
+          window.api.ssh.resize(sessionId, currentSize.cols, currentSize.rows);
+        }
+      }, 300);
     } catch (err) {
       get().updateSessionStatus(sessionId, 'error', err instanceof Error ? err.message : String(err));
       throw err;

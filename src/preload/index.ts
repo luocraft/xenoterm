@@ -13,8 +13,8 @@ const api = {
       ipcRenderer.invoke('ssh:connect', config, password),
     disconnect: (sessionId: string): Promise<void> =>
       ipcRenderer.invoke('ssh:disconnect', sessionId),
-    reconnect: (sessionId: string, password?: string): Promise<SSHSession> =>
-      ipcRenderer.invoke('ssh:reconnect', sessionId, password),
+    reconnect: (sessionId: string, password?: string, cols?: number, rows?: number): Promise<SSHSession> =>
+      ipcRenderer.invoke('ssh:reconnect', sessionId, password, cols, rows),
     write: (sessionId: string, data: string): void =>
       ipcRenderer.send('ssh:write', sessionId, data),
     resize: (sessionId: string, cols: number, rows: number): void =>
