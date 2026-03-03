@@ -1,53 +1,36 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#2d1b4e"/>
-      <stop offset="100%" style="stop-color:#1a1035"/>
-    </linearGradient>
-    <linearGradient id="orbit" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#a8d8ff"/>
-      <stop offset="100%" style="stop-color:#90f0a0"/>
-    </linearGradient>
-    <linearGradient id="glow" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#58a6ff;stop-opacity:0.3"/>
-      <stop offset="100%" style="stop-color:#3fb950;stop-opacity:0.1"/>
+    <linearGradient id="arc" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00d2ff"/>
+      <stop offset="100%" style="stop-color:#0066ff"/>
     </linearGradient>
   </defs>
 
-  <!-- Background circle -->
-  <circle cx="256" cy="256" r="248" fill="url(#bg)" stroke="#6c3fa0" stroke-width="4"/>
+  <!-- Transparent background -->
 
-  <!-- Outer orbit ring - tilted ellipse 1 -->
-  <ellipse cx="256" cy="256" rx="155" ry="58" fill="none" stroke="url(#orbit)" stroke-width="7" opacity="1"
-    transform="rotate(-30 256 256)"/>
+  <!-- Outer arc ring with gap -->
+  <circle cx="256" cy="256" r="210"
+    fill="none"
+    stroke="url(#arc)"
+    stroke-width="28"
+    stroke-linecap="round"
+    stroke-dasharray="1050 270"
+    stroke-dashoffset="-55"
+    transform="rotate(-100 256 256)"/>
 
-  <!-- Outer orbit ring - tilted ellipse 2 -->
-  <ellipse cx="256" cy="256" rx="155" ry="58" fill="none" stroke="url(#orbit)" stroke-width="7" opacity="1"
-    transform="rotate(30 256 256)"/>
+  <!-- Middle ring with gap at bottom-right -->
+  <circle cx="256" cy="256" r="130"
+    fill="none"
+    stroke="url(#arc)"
+    stroke-width="16"
+    stroke-linecap="round"
+    stroke-dasharray="680 136"
+    stroke-dashoffset="-20"
+    transform="rotate(30 256 256)"
+    opacity="0.7"/>
 
-  <!-- Horizontal orbit -->
-  <ellipse cx="256" cy="256" rx="155" ry="58" fill="none" stroke="url(#orbit)" stroke-width="7" opacity="1"
-    transform="rotate(90 256 256)"/>
-
-  <!-- Terminal prompt ">_" in center -->
-  <text x="220" y="275" font-family="'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace"
-    font-size="80" font-weight="700" fill="#e6edf3" letter-spacing="-2">
-    &gt;_
-  </text>
-
-  <!-- Core glow -->
-  <circle cx="256" cy="256" r="65" fill="url(#glow)" opacity="0.5"/>
-
-  <!-- Small orbit dots (nodes on the orbits) -->
-  <!-- Dot on orbit 1 -->
-  <circle cx="145" cy="160" r="10" fill="#a8d8ff" opacity="1"/>
-  <circle cx="145" cy="160" r="16" fill="#a8d8ff" opacity="0.2"/>
-
-  <!-- Dot on orbit 2 -->
-  <circle cx="367" cy="160" r="10" fill="#90f0a0" opacity="1"/>
-  <circle cx="367" cy="160" r="16" fill="#90f0a0" opacity="0.2"/>
-
-  <!-- Dot on orbit 3 -->
-  <circle cx="256" cy="390" r="10" fill="#e0c4ff" opacity="1"/>
-  <circle cx="256" cy="390" r="16" fill="#e0c4ff" opacity="0.2"/>
+  <!-- ECG wave - classic sharp spike style -->
+  <polyline
+    points="118,256 175,256 195,256 210,230 222,256 236,256 248,180 260,332 272,256 286,256 300,230 312,256 326,256 394,256"
+    fill="none" stroke="url(#arc)" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
