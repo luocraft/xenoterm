@@ -1,36 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <defs>
-    <linearGradient id="arc" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#00d2ff"/>
-      <stop offset="100%" style="stop-color:#0066ff"/>
-    </linearGradient>
-  </defs>
-
-  <!-- Transparent background -->
-
-  <!-- Outer arc ring with gap -->
-  <circle cx="256" cy="256" r="210"
-    fill="none"
-    stroke="url(#arc)"
-    stroke-width="28"
-    stroke-linecap="round"
-    stroke-dasharray="1050 270"
-    stroke-dashoffset="-55"
-    transform="rotate(-100 256 256)"/>
-
-  <!-- Middle ring with gap at bottom-right -->
-  <circle cx="256" cy="256" r="130"
-    fill="none"
-    stroke="url(#arc)"
-    stroke-width="16"
-    stroke-linecap="round"
-    stroke-dasharray="680 136"
-    stroke-dashoffset="-20"
-    transform="rotate(30 256 256)"
-    opacity="0.7"/>
-
-  <!-- ECG wave - classic sharp spike style -->
-  <polyline
-    points="118,256 175,256 195,256 210,230 222,256 236,256 248,180 260,332 272,256 286,256 300,230 312,256 326,256 394,256"
-    fill="none" stroke="url(#arc)" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Full blue background with rounded corners -->
+  <rect width="512" height="512" rx="100" ry="100" fill="#7c3aed"/>
+  <!-- Oscilloscope waveform - white -->
+  <path d="M64 256 L120 256 L152 152 L216 360 L280 120 L344 344 L376 216 L448 256"
+    stroke="white" stroke-width="28" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Corner accent dot -->
+  <circle cx="424" cy="88" r="36" fill="white"/>
 </svg>
