@@ -7,7 +7,7 @@ import * as os from 'os';
 
 // ============ Config ============
 
-const LICENSE_SERVER = 'http://39.105.198.48:3000'; // Change to your domain later
+const LICENSE_SERVER = 'https://xenotech.net'; // License server
 const LICENSE_SECRET = '012a91f83ff088b7876cf490a16d1f8ad77a24a5179edd1664876b7e1c0ba406'; // Must match server config
 
 // ============ Machine ID ============

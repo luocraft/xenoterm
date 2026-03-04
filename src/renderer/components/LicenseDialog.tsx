@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import QRCode from 'qrcode';
 import { useT } from '../i18n';
 interface LicenseStatus {
   licensed: boolean;
@@ -151,6 +152,7 @@ export function LicenseDialog({ onClose }: { onClose: () => void }) {
         pollRef.current = setInterval(async () => {
           try {
             const q = await window.api.license.queryPayment(res.orderId!);
+            console.log('[License] poll result:', JSON.stringify(q));
             if (q.success && q.status === 'paid' && q.licenseKey) {
               if (pollRef.current) clearInterval(pollRef.current);
               setPaidLicenseKey(q.licenseKey);
@@ -158,7 +160,9 @@ export function LicenseDialog({ onClose }: { onClose: () => void }) {
               // Auto-activate
               setActivateKey(q.licenseKey);
             }
-          } catch {}
+          } catch (e) {
+            console.error('[License] poll error:', e);
+          }
         }, 3000);
       } else {
         setPayStatus('error');
@@ -380,6 +384,16 @@ function ActivateTab({
 
 // ============ Tab: Buy ============
 
+function QrCanvas({ data, size }: { data: string; size: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    if (ref.current) {
+      QRCode.toCanvas(ref.current, data, { width: size, margin: 2 });
+    }
+  }, [data, size]);
+  return <canvas ref={ref} className="rounded-lg" style={{ border: '1px solid var(--color-border)', width: size, height: size }} />;
+}
+
 function BuyTab({
   payType, setPayType, payStatus, payError, qrUrl, paidLicenseKey, onCreatePayment, onActivate
 }: {
@@ -420,8 +434,7 @@ function BuyTab({
           {t('license.scanQr')}
         </p>
         <div className="flex justify-center">
-          <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrUrl)}`} alt="Payment QR Code" className="w-48 h-48 rounded-lg"
-            style={{ border: '1px solid var(--color-border)' }} />
+          <QrCanvas data={qrUrl} size={192} />
         </div>
         <div className="flex items-center justify-center gap-2">
           <span className="inline-block w-2 h-2 rounded-full bg-[var(--color-accent)] animate-pulse" />
@@ -434,7 +447,7 @@ function BuyTab({
   return (
     <div className="space-y-3">
       <div className="p-3 rounded-lg text-center" style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-border)' }}>
-        <p className="text-lg font-bold" style={{ color: 'var(--color-text-primary)' }}>¥49</p>
+        <p className="text-lg font-bold" style={{ color: 'var(--color-text-primary)' }}>¥99</p>
         <p className="text-[10px]" style={{ color: 'var(--color-text-dim)' }}>{t('license.productName')}</p>
         <p className="text-[9px] mt-1" style={{ color: 'var(--color-text-dim)' }}>{t('license.productDesc')}</p>
       </div>
