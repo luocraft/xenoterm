@@ -783,7 +783,15 @@ export function registerIpcHandlers(): void {
 
   // === License handlers ===
   ipcMain.handle('license:getStatus', async () => {
-    return licenseService.getLicenseStatus();
+    const status = licenseService.getLicenseStatus();
+    // Auto-recover: if not licensed and not in trial, try to recover from server
+    if (!status.licensed && !status.trial) {
+      const recovered = await licenseService.recoverLicense();
+      if (recovered.success) {
+        return licenseService.getLicenseStatus();
+      }
+    }
+    return status;
   });
 
   ipcMain.handle('license:getMachineId', async () => {

@@ -330,6 +330,7 @@ const en = {
   'license.wxpay': '💚 WeChat Pay',
   'license.productName': 'XenoTerm Annual License',
   'license.productDesc': 'One machine · 12 months of updates',
+  'license.alreadyPurchased': 'You already have an active license. No need to purchase again.',
 
   // ─── CAN Debug (remaining) ───
   'can.unloadDbc': 'Unload DBC',

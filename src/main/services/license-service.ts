@@ -162,6 +162,31 @@ export async function verifyLicenseOnline(): Promise<boolean> {
 
 // ============ Activation ============
 
+/** Try to recover license from server by machine ID (for reinstall scenarios) */
+export async function recoverLicense(): Promise<{ success: boolean; licenseKey?: string }> {
+  const machineId = getMachineId();
+  try {
+    const res = await fetch(`${LICENSE_SERVER}/api/license/recover`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ machineId }),
+    });
+    const result = await res.json();
+    if (result.success && result.licenseKey && result.signature) {
+      const data = readLicenseData();
+      data.licenseKey = result.licenseKey;
+      data.machineId = machineId;
+      data.signature = result.signature;
+      if (result.expiresAt) data.expiresAt = result.expiresAt;
+      writeLicenseData(data);
+      return { success: true, licenseKey: result.licenseKey };
+    }
+    return { success: false };
+  } catch {
+    return { success: false };
+  }
+}
+
 export async function activateLicense(licenseKey: string): Promise<{ success: boolean; error?: string }> {
   const machineId = getMachineId();
   try {

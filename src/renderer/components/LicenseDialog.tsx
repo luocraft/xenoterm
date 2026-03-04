@@ -166,9 +166,15 @@ export function LicenseDialog({ onClose }: { onClose: () => void }) {
               if (pollRef.current) clearInterval(pollRef.current);
               setPaidLicenseKey(q.licenseKey);
               setPayStatus('success');
-              // Auto-activate
+              // Auto-activate immediately
+              try {
+                const activateRes = await window.api.license.activate(q.licenseKey);
+                if (activateRes.success) {
+                  await refreshStatus();
+                  window.dispatchEvent(new Event('license-status-changed'));
+                }
+              } catch {}
               setActivateKey(q.licenseKey);
-              // Notify status bar to refresh
               window.dispatchEvent(new Event('license-status-changed'));
             }
           } catch (e) {
@@ -192,7 +198,11 @@ export function LicenseDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ backgroundColor: 'var(--color-overlay)' }} onClick={onClose}>
+      style={{ backgroundColor: 'var(--color-overlay)' }} onClick={() => {
+        // 支付流程中不允许点击外部关闭
+        if (payStatus === 'polling' || payStatus === 'success') return;
+        onClose();
+      }}>
       <div className="rounded-xl shadow-2xl w-[420px] max-h-[80vh] overflow-hidden flex flex-col"
         style={{ backgroundColor: 'var(--color-sidebar)', border: '1px solid var(--color-border)' }}
         onClick={(e: React.MouseEvent) => e.stopPropagation()}>
@@ -224,6 +234,7 @@ export function LicenseDialog({ onClose }: { onClose: () => void }) {
               activateMsg={activateMsg}
               activating={activating}
               onActivate={handleActivate}
+              status={status}
             />
           )}
           {tab === 'buy' && (
@@ -236,6 +247,8 @@ export function LicenseDialog({ onClose }: { onClose: () => void }) {
               paidLicenseKey={paidLicenseKey}
               onCreatePayment={handleCreatePayment}
               onActivate={async () => { setTab('activate'); }}
+              status={status}
+              onRenew={() => setTab('buy')}
             />
           )}
         </div>
@@ -352,14 +365,35 @@ function StatusTab({ status, machineId, onRenew }: { status: LicenseStatus; mach
 // ============ Tab: Activate ============
 
 function ActivateTab({
-  activateKey, setActivateKey, activateMsg, activating, onActivate
+  activateKey, setActivateKey, activateMsg, activating, onActivate, status
 }: {
   activateKey: string;
   setActivateKey: (v: string) => void;
   activateMsg: { ok: boolean; text: string } | null;
   activating: boolean;
   onActivate: () => void;
+  status: LicenseStatus | null;
 }) {
+  // 已有 license，显示当前 key
+  if (status?.licensed && status.licenseKey) {
+    return (
+      <div className="space-y-3">
+        <p className="text-[11px]" style={{ color: 'var(--color-text-secondary)' }}>
+          Your license is active.
+        </p>
+        <div className="p-3 rounded-lg text-center" style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-border)' }}>
+          <p className="text-[10px] mb-1" style={{ color: 'var(--color-text-dim)' }}>License Key</p>
+          <p className="text-xs font-mono tracking-wider" style={{ color: 'var(--color-accent)' }}>{status.licenseKey}</p>
+        </div>
+        {status.expiresAt && (
+          <p className="text-[10px] text-center" style={{ color: 'var(--color-text-dim)' }}>
+            Expires: {new Date(status.expiresAt).toLocaleDateString()}
+          </p>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-3">
       <p className="text-[11px]" style={{ color: 'var(--color-text-secondary)' }}>
@@ -406,7 +440,7 @@ function QrCanvas({ data, size }: { data: string; size: number }) {
 }
 
 function BuyTab({
-  payType, setPayType, payStatus, payError, qrUrl, paidLicenseKey, onCreatePayment, onActivate
+  payType, setPayType, payStatus, payError, qrUrl, paidLicenseKey, onCreatePayment, onActivate, status, onRenew
 }: {
   payType: 'alipay' | 'wxpay';
   setPayType: (v: 'alipay' | 'wxpay') => void;
@@ -416,8 +450,50 @@ function BuyTab({
   paidLicenseKey: string | null;
   onCreatePayment: () => void;
   onActivate: () => void;
+  status: LicenseStatus | null;
+  onRenew: () => void;
 }) {
   const t = useT();
+
+  // 已有有效 license，不允许重复购买
+  if (status?.licensed && status.licenseKey) {
+    return (
+      <div className="space-y-3">
+        <div className="p-3 rounded-lg text-center" style={{ backgroundColor: '#22c55e10', border: '1px solid #22c55e40' }}>
+          <span className="text-2xl">✅</span>
+          <p className="text-xs font-semibold mt-2" style={{ color: 'var(--color-text-primary)' }}>
+            {t('license.licensed')}
+          </p>
+          <p className="text-[10px] font-mono mt-2 tracking-wider" style={{ color: 'var(--color-accent)' }}>
+            {status.licenseKey}
+          </p>
+          {status.expiresAt && (
+            <p className="text-[10px] mt-1" style={{ color: 'var(--color-text-dim)' }}>
+              {t('license.expiresAt', { date: new Date(status.expiresAt).toLocaleDateString() })}
+            </p>
+          )}
+          {status.licenseDaysLeft != null && status.licenseDaysLeft >= 0 && (
+            <div className="flex items-center gap-2 mt-2 px-4">
+              <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--color-border)' }}>
+                <div className="h-full rounded-full transition-all"
+                  style={{
+                    width: `${Math.min(100, (status.licenseDaysLeft / 365) * 100)}%`,
+                    backgroundColor: status.licenseDaysLeft <= 30 ? '#ef4444' : 'var(--color-accent)',
+                  }} />
+              </div>
+              <span className="text-[10px] font-medium" style={{ color: status.licenseDaysLeft <= 30 ? '#ef4444' : 'var(--color-text-dim)' }}>
+                {t('license.licenseDays', { days: String(status.licenseDaysLeft) })}
+              </span>
+            </div>
+          )}
+        </div>
+        <p className="text-[10px] text-center" style={{ color: 'var(--color-text-dim)' }}>
+          {t('license.alreadyPurchased')}
+        </p>
+      </div>
+    );
+  }
+
   if (payStatus === 'success' && paidLicenseKey) {
     return (
       <div className="text-center space-y-3">

@@ -330,6 +330,7 @@ const zh = {
   'license.wxpay': '💚 微信支付',
   'license.productName': 'XenoTerm 年度许可证',
   'license.productDesc': '单机 · 12个月更新',
+  'license.alreadyPurchased': '您已拥有有效许可证，无需重复购买。',
 
   // ─── CAN Debug (remaining) ───
   'can.unloadDbc': '卸载DBC',
