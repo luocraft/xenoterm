@@ -322,7 +322,7 @@ const zh = {
   'license.activateSuccess': '✅ 激活成功!',
   'license.activateFail': '❌ 激活失败',
   'license.payNow': '立即支付',
-  'license.scanQr': '扫码支付 ¥99',
+  'license.scanQr': '扫码支付 ¥49',
   'license.waitingPay': '等待支付...',
   'license.paySuccess': '支付成功!',
   'license.activateNow': '立即激活',

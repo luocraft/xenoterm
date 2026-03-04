@@ -25,6 +25,7 @@ db.exec(`
     machine_id TEXT,
     order_id TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'active',
+    expires_at TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     activated_at TEXT,
     FOREIGN KEY (order_id) REFERENCES orders(id)
@@ -50,6 +51,9 @@ const stmts = {
   ),
   getLicenseByMachine: db.prepare(
     "SELECT * FROM licenses WHERE machine_id = ? AND status = 'active'"
+  ),
+  updateLicenseExpiry: db.prepare(
+    'UPDATE licenses SET expires_at = ? WHERE key = ?'
   ),
 };
 

@@ -322,7 +322,7 @@ const en = {
   'license.activateSuccess': '✅ Activated successfully!',
   'license.activateFail': '❌ Activation failed',
   'license.payNow': 'Pay Now',
-  'license.scanQr': 'Scan QR code to pay ¥99',
+  'license.scanQr': 'Scan QR code to pay ¥49',
   'license.waitingPay': 'Waiting for payment...',
   'license.paySuccess': 'Payment Successful!',
   'license.activateNow': 'Activate Now',

@@ -136,10 +136,15 @@ app.post('/api/pay/callback', (req, res) => {
     }
 
     const licenseKey = generateLicenseKey();
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 365);
+    const expiresAtStr = expiresAt.toISOString();
+
     stmts.updateOrderPaid.run('paid', licenseKey, outTradeNo);
     stmts.createLicense.run(licenseKey, order.id, 'active');
+    stmts.updateLicenseExpiry.run(expiresAtStr, licenseKey);
 
-    console.log(`Payment success: ${outTradeNo} -> License: ${licenseKey}`);
+    console.log(`Payment success: ${outTradeNo} -> License: ${licenseKey}, expires: ${expiresAtStr}`);
     res.send('SUCCESS');
   } catch (err) {
     console.error('Callback error:', err);
@@ -181,7 +186,7 @@ app.post('/api/license/activate', (req, res) => {
   stmts.activateLicense.run(machineId, licenseKey, machineId);
   const signature = signLicense(licenseKey, machineId);
 
-  res.json({ success: true, licenseKey, machineId, signature });
+  res.json({ success: true, licenseKey, machineId, signature, expiresAt: license.expires_at });
 });
 
 // Verify license (called by Electron client on startup)
@@ -196,8 +201,41 @@ app.post('/api/license/verify', (req, res) => {
     return res.json({ success: true, valid: false });
   }
 
+  // 检查是否过期
+  if (license.expires_at && new Date() > new Date(license.expires_at)) {
+    return res.json({ success: true, valid: false, expired: true, expiresAt: license.expires_at });
+  }
+
   const signature = signLicense(licenseKey, machineId);
-  res.json({ success: true, valid: true, signature });
+  res.json({ success: true, valid: true, signature, expiresAt: license.expires_at });
+});
+
+// Renew license (extend by 365 days)
+app.post('/api/license/renew', (req, res) => {
+  const { licenseKey, machineId } = req.body;
+  if (!licenseKey || !machineId) {
+    return res.status(400).json({ success: false, error: 'Missing licenseKey or machineId' });
+  }
+
+  const license = stmts.getLicense.get(licenseKey);
+  if (!license || license.machine_id !== machineId) {
+    return res.json({ success: false, error: 'Invalid license or machine mismatch' });
+  }
+
+  // 从今天起续期365天
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + 365);
+  const expiresAtStr = expiresAt.toISOString();
+
+  stmts.updateLicenseExpiry.run(expiresAtStr, licenseKey);
+  // 确保状态为 active
+  if (license.status !== 'active') {
+    stmts.activateLicense.run(machineId, licenseKey, machineId);
+  }
+
+  const signature = signLicense(licenseKey, machineId);
+  console.log(`License renewed: ${licenseKey}, new expiry: ${expiresAtStr}`);
+  res.json({ success: true, expiresAt: expiresAtStr, signature });
 });
 
 // ============ Start ============

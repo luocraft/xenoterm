@@ -15,7 +15,7 @@ module.exports = {
   // Product
   product: {
     name: 'XenoTerm License',
-    price: 99.00,  // CNY, adjust as needed
+    price: 49.00,  // CNY, 年订阅价格
     trialDays: 15,
   },
 

@@ -434,7 +434,7 @@ function BuyTab({
   return (
     <div className="space-y-3">
       <div className="p-3 rounded-lg text-center" style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-border)' }}>
-        <p className="text-lg font-bold" style={{ color: 'var(--color-text-primary)' }}>¥99</p>
+        <p className="text-lg font-bold" style={{ color: 'var(--color-text-primary)' }}>¥49</p>
         <p className="text-[10px]" style={{ color: 'var(--color-text-dim)' }}>{t('license.productName')}</p>
         <p className="text-[9px] mt-1" style={{ color: 'var(--color-text-dim)' }}>{t('license.productDesc')}</p>
       </div>
