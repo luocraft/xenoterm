@@ -497,6 +497,7 @@ export default function App() {
       <ToastContainer />
       {showLicense && <LicenseDialog onClose={() => {
         setShowLicense(false);
+        window.dispatchEvent(new Event('license-status-changed'));
         // Re-check license after dialog closes (user may have activated)
         window.api.license.getStatus().then((s) => {
           setLicenseExpired(s.expired && !s.licensed);

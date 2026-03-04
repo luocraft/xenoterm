@@ -18,9 +18,17 @@ export function LicenseStatusBar({ onClick }: { onClick: () => void }) {
   const t = useT();
   const [status, setStatus] = useState<LicenseStatus | null>(null);
 
-  useEffect(() => {
+  const refresh = useCallback(() => {
     window.api.license.getStatus().then(setStatus).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    refresh();
+    // Listen for license status changes
+    const handler = () => refresh();
+    window.addEventListener('license-status-changed', handler);
+    return () => window.removeEventListener('license-status-changed', handler);
+  }, [refresh]);
 
   if (!status) return null;
 
@@ -126,6 +134,7 @@ export function LicenseDialog({ onClose }: { onClose: () => void }) {
       if (res.success) {
         setActivateMsg({ ok: true, text: 'Activated successfully!' });
         await refreshStatus();
+        window.dispatchEvent(new Event('license-status-changed'));
       } else {
         setActivateMsg({ ok: false, text: res.error || 'Activation failed' });
       }
@@ -159,6 +168,8 @@ export function LicenseDialog({ onClose }: { onClose: () => void }) {
               setPayStatus('success');
               // Auto-activate
               setActivateKey(q.licenseKey);
+              // Notify status bar to refresh
+              window.dispatchEvent(new Event('license-status-changed'));
             }
           } catch (e) {
             console.error('[License] poll error:', e);
@@ -447,29 +458,27 @@ function BuyTab({
   return (
     <div className="space-y-3">
       <div className="p-3 rounded-lg text-center" style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-border)' }}>
-        <p className="text-lg font-bold" style={{ color: 'var(--color-text-primary)' }}>¥99</p>
+        <p className="text-lg font-bold" style={{ color: 'var(--color-text-primary)' }}>¥49</p>
         <p className="text-[10px]" style={{ color: 'var(--color-text-dim)' }}>{t('license.productName')}</p>
         <p className="text-[9px] mt-1" style={{ color: 'var(--color-text-dim)' }}>{t('license.productDesc')}</p>
       </div>
 
-      {/* Payment method */}
+      {/* Payment method - Alipay only */}
       <div className="flex gap-2">
-        {(['alipay', 'wxpay'] as const).map((pt) => (
-          <button key={pt} onClick={() => setPayType(pt)}
-            className="flex-1 py-2 rounded-lg text-xs font-medium transition-all"
-            style={{
-              backgroundColor: payType === pt ? (pt === 'alipay' ? '#1677ff15' : '#07c16015') : 'var(--color-input-bg)',
-              border: `1px solid ${payType === pt ? (pt === 'alipay' ? '#1677ff' : '#07c160') : 'var(--color-border)'}`,
-              color: payType === pt ? (pt === 'alipay' ? '#1677ff' : '#07c160') : 'var(--color-text-dim)',
-            }}>
-            {pt === 'alipay' ? t('license.alipay') : t('license.wxpay')}
-          </button>
-        ))}
+        <button
+          className="flex-1 py-2 rounded-lg text-xs font-medium transition-all"
+          style={{
+            backgroundColor: '#1677ff15',
+            border: '1px solid #1677ff',
+            color: '#1677ff',
+          }}>
+          {t('license.alipay')}
+        </button>
       </div>
 
       <button onClick={onCreatePayment} disabled={payStatus === 'loading'}
         className="w-full py-2 text-xs rounded-lg text-white font-medium transition-opacity disabled:opacity-40"
-        style={{ background: payType === 'alipay' ? 'linear-gradient(135deg, #1677ff, #4096ff)' : 'linear-gradient(135deg, #07c160, #2aae67)' }}>
+        style={{ background: 'linear-gradient(135deg, #1677ff, #4096ff)' }}>
         {payStatus === 'loading' ? 'Creating order...' : t('license.payNow')}
       </button>
 
