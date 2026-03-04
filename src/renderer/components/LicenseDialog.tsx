@@ -420,7 +420,7 @@ function BuyTab({
           {t('license.scanQr')}
         </p>
         <div className="flex justify-center">
-          <img src={qrUrl} alt="Payment QR Code" className="w-48 h-48 rounded-lg"
+          <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrUrl)}`} alt="Payment QR Code" className="w-48 h-48 rounded-lg"
             style={{ border: '1px solid var(--color-border)' }} />
         </div>
         <div className="flex items-center justify-center gap-2">
