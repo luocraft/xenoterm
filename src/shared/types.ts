@@ -2,6 +2,23 @@
 
 export type SessionStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
 
+export interface RemoteDiskUsage {
+  filesystem: string;
+  mount: string;
+  total: number;
+  used: number;
+  available: number;
+  percent: number;
+}
+
+export interface RemoteResources {
+  sampledAt: number;
+  cpuPercent: number | null;
+  loadAverage: number[];
+  memory: { total: number; used: number; available: number };
+  disks: RemoteDiskUsage[];
+}
+
 export interface HostEntry {
   id: string;
   name: string;
@@ -67,6 +84,34 @@ export interface AppConfig {
   };
   sidebarCollapsed: boolean;
   defaultKeepAlive: number;
+  autoCheckUpdates: boolean;
+}
+
+export type UpdateState =
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'not-available'
+  | 'downloading'
+  | 'downloaded'
+  | 'error'
+  | 'disabled';
+
+export interface UpdateStatusSnapshot {
+  enabled: boolean;
+  currentVersion: string;
+  autoCheckOnStartup: boolean;
+  state: UpdateState;
+  availableVersion?: string;
+  downloadedVersion?: string;
+  progressPercent?: number;
+  transferredBytes?: number;
+  totalBytes?: number;
+  bytesPerSecond?: number;
+  releaseDate?: string;
+  checkedAt?: string;
+  lastCheckManual: boolean;
+  error?: string;
 }
 
 export interface ExportData {
@@ -122,6 +167,7 @@ export interface SerialPortInfo {
   pnpId?: string;
   vendorId?: string;
   productId?: string;
+  friendlyName?: string;
 }
 
 export interface SerialConfig {

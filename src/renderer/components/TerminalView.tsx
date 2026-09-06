@@ -3,6 +3,8 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { useAppStore } from '../store/app-store';
+import type { AppConfig } from '../../shared/types';
+import { DEFAULT_TERMINAL_CONFIG } from '../../shared/terminal-defaults';
 
 interface TerminalViewProps {
   sessionId: string;
@@ -25,6 +27,7 @@ interface CachedTerminal {
     lastViewportTop: number;
     /** Render function — called on scroll, data, resize */
     render: () => void;
+    cancelRender: () => void;
     /** Cleanup disposables */
     disposables: Array<{ dispose: () => void }>;
   };
@@ -34,12 +37,12 @@ const terminalCache = new Map<string, CachedTerminal>();
 
 function getDarkTheme() {
   return {
-    background: '#0d0e1c',
-    foreground: '#e4e4e7',
-    cursor: '#6366f1',
-    cursorAccent: '#0d0e1c',
-    selectionBackground: '#6366f140',
-    black: '#1a1b2e',
+    background: '#242423',
+    foreground: '#eeede9',
+    cursor: '#CC7D5E',
+    cursorAccent: '#242423',
+    selectionBackground: '#cc7d5e40',
+    black: '#30302e',
     red: '#f87171',
     green: '#4ade80',
     yellow: '#facc15',
@@ -60,20 +63,20 @@ function getDarkTheme() {
 
 function getLightTheme() {
   return {
-    background: '#d5dbd7',
-    foreground: '#1a1f1c',
-    cursor: '#4f46e5',
-    cursorAccent: '#d5dbd7',
-    selectionBackground: '#4f46e540',
-    black: '#8a9490',
+    background: '#F9F9F7',
+    foreground: '#2D2D2B',
+    cursor: '#CC7D5E',
+    cursorAccent: '#F9F9F7',
+    selectionBackground: '#cc7d5e35',
+    black: '#2D2D2B',
     red: '#dc2626',
     green: '#16a34a',
     yellow: '#ca8a04',
     blue: '#2563eb',
     magenta: '#9333ea',
     cyan: '#0891b2',
-    white: '#d5dbd7',
-    brightBlack: '#6e7a73',
+    white: '#eeede9',
+    brightBlack: '#78766f',
     brightRed: '#ef4444',
     brightGreen: '#22c55e',
     brightYellow: '#eab308',
@@ -84,10 +87,10 @@ function getLightTheme() {
   };
 }
 
-function getTerminalConfig(isDark: boolean) {
+function getTerminalConfig(isDark: boolean, terminalConfig: AppConfig['terminal']) {
   return {
-    fontFamily: "'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace",
-    fontSize: 12,
+    fontFamily: terminalConfig.fontFamily || DEFAULT_TERMINAL_CONFIG.fontFamily,
+    fontSize: terminalConfig.fontSize || DEFAULT_TERMINAL_CONFIG.fontSize,
     theme: isDark ? getDarkTheme() : getLightTheme(),
   };
 }
@@ -101,11 +104,11 @@ function formatTime(d: Date): string {
   return `${h}:${m}:${s}`;
 }
 
-function getOrCreateTerminal(sessionId: string, isDark: boolean): CachedTerminal {
+function getOrCreateTerminal(sessionId: string, isDark: boolean, terminalConfig: AppConfig['terminal']): CachedTerminal {
   let cached = terminalCache.get(sessionId);
   if (cached) return cached;
 
-  const config = getTerminalConfig(isDark);
+  const config = getTerminalConfig(isDark, terminalConfig);
   const terminal = new Terminal({
     fontFamily: config.fontFamily,
     fontSize: config.fontSize,
@@ -143,10 +146,27 @@ function getOrCreateTerminal(sessionId: string, isDark: boolean): CachedTerminal
   // Gutter state
   const lineTimestamps: string[] = [];
   let lastViewportTop = 0;
+  let disposed = false;
+  let gutterFrame: number | null = null;
 
   function renderGutter() {
+    if (disposed || gutterFrame !== null || !useAppStore.getState().timestampGutterVisible) return;
+    // A single SSH packet can contain thousands of linefeeds and scroll events.
+    // Paint once per frame instead of synchronously on every parser event.
+    gutterFrame = requestAnimationFrame(() => {
+      gutterFrame = null;
+      paintGutter();
+    });
+  }
+
+  function cancelGutterRender() {
+    if (gutterFrame !== null) cancelAnimationFrame(gutterFrame);
+    gutterFrame = null;
+  }
+
+  function paintGutter() {
     const visible = useAppStore.getState().timestampGutterVisible;
-    if (!visible) return;
+    if (disposed || !visible || !wrapper.isConnected || wrapper.offsetWidth === 0 || wrapper.offsetHeight === 0) return;
     const buf = terminal.buffer.active;
     const rows = terminal.rows;
     const cellHeight = getCellHeight(terminal);
@@ -161,21 +181,24 @@ function getOrCreateTerminal(sessionId: string, isDark: boolean): CachedTerminal
     const containerH = gutterCanvas.parentElement?.clientHeight || (rows * cellHeight);
     const canvasH = Math.max(containerH, rows * cellHeight);
 
-    gutterCanvas.width = canvasW * dpr;
-    gutterCanvas.height = canvasH * dpr;
-    gutterCanvas.style.height = `${canvasH}px`;
+    const pixelWidth = Math.round(canvasW * dpr);
+    const pixelHeight = Math.round(canvasH * dpr);
+    // Assigning width/height resets and reallocates the canvas, even if unchanged.
+    if (gutterCanvas.width !== pixelWidth) gutterCanvas.width = pixelWidth;
+    if (gutterCanvas.height !== pixelHeight) gutterCanvas.height = pixelHeight;
+    if (gutterCanvas.style.height !== `${canvasH}px`) gutterCanvas.style.height = `${canvasH}px`;
 
     const ctx = gutterCanvas.getContext('2d');
     if (!ctx) return;
-    ctx.scale(dpr, dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     // Background matches terminal, with subtle right-edge fade for soft separation
-    ctx.fillStyle = dark ? '#0d0e1c' : '#d5dbd7';
+    ctx.fillStyle = dark ? '#242423' : '#F9F9F7';
     ctx.fillRect(0, 0, canvasW, canvasH);
 
     // Soft right edge: a thin gradient strip that blends into terminal bg
     const edgeWidth = 6;
-    const fadeColor = dark ? [30, 31, 53] : [188, 197, 192]; // slightly lighter/darker
+    const fadeColor = dark ? [48, 48, 46] : [230, 229, 224];
     const grad = ctx.createLinearGradient(canvasW - edgeWidth, 0, canvasW, 0);
     grad.addColorStop(0, `rgba(${fadeColor[0]},${fadeColor[1]},${fadeColor[2]},0)`);
     grad.addColorStop(1, `rgba(${fadeColor[0]},${fadeColor[1]},${fadeColor[2]},0.5)`);
@@ -183,8 +206,9 @@ function getOrCreateTerminal(sessionId: string, isDark: boolean): CachedTerminal
     ctx.fillRect(canvasW - edgeWidth, 0, edgeWidth, canvasH);
 
     // Text style — match terminal font size for baseline alignment
-    const fontSize = terminal.options.fontSize || 12;
-    ctx.font = `${fontSize}px 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace`;
+    const fontSize = terminal.options.fontSize || DEFAULT_TERMINAL_CONFIG.fontSize;
+    const fontFamily = terminal.options.fontFamily || DEFAULT_TERMINAL_CONFIG.fontFamily;
+    ctx.font = `${fontSize}px ${fontFamily}`;
     ctx.textBaseline = 'middle';
 
     const viewportTop = buf.viewportY;
@@ -201,7 +225,7 @@ function getOrCreateTerminal(sessionId: string, isDark: boolean): CachedTerminal
 
         if (hasContent) {
           const y = row * cellHeight + cellHeight / 2;
-          ctx.fillStyle = dark ? '#52525b' : '#95a09a';
+          ctx.fillStyle = dark ? '#96948e' : '#807d75';
           ctx.fillText(ts, 0, y);
         }
       }
@@ -228,7 +252,7 @@ function getOrCreateTerminal(sessionId: string, isDark: boolean): CachedTerminal
 
   function getGhostColor(): string {
     const theme = useAppStore.getState().theme;
-    return theme === 'dark' ? '#6b7280' : '#95a09a';
+    return theme === 'dark' ? '#96948e' : '#807d75';
   }
 
   function clearGhost() {
@@ -357,19 +381,20 @@ function getOrCreateTerminal(sessionId: string, isDark: boolean): CachedTerminal
   function scheduleCwdDetect() {
     if (cwdDetectTimer) clearTimeout(cwdDetectTimer);
     cwdDetectTimer = setTimeout(() => {
-      detectCwdFromPrompt();
       cwdDetectTimer = null;
+      if (!disposed) detectCwdFromPrompt();
     }, 150);
   }
 
   const dataDisposable = terminal.onData((data) => {
+    // Send keystrokes before command-history persistence or suggestion work.
+    const accepted = !inAlternateScreen && data === '\x1b[C' && ghostSuffix ? ghostSuffix : null;
+    window.api.ssh.write(sessionId, accepted ?? data);
     try {
       if (!inAlternateScreen) {
-        if ((data === '\x1b[C') && ghostSuffix) {
-          const accepted = ghostSuffix;
+        if (accepted) {
           clearGhost();
           lineBuffer += accepted;
-          window.api.ssh.write(sessionId, accepted);
           suppressSuggestion = false;
           return;
         }
@@ -415,7 +440,6 @@ function getOrCreateTerminal(sessionId: string, isDark: boolean): CachedTerminal
     } catch (e) {
       console.error('[Terminal] Command tracking error:', e);
     }
-    window.api.ssh.write(sessionId, data);
   });
 
   const unsubData = window.api.ssh.onData(sessionId, (data) => {
@@ -434,26 +458,15 @@ function getOrCreateTerminal(sessionId: string, isDark: boolean): CachedTerminal
     // Clear ghost overlay (DOM-based, no terminal escape sequences needed)
     if (ghostSuffix) clearGhost();
 
-    terminal.write(data);
-
-    // Reset timestamps AFTER terminal processes the clear, so cursor is repositioned
-    if (isClear) {
-      lineTimestamps.length = 0;
-    }
-
-    // Stamp the current line after write (cursor is now at final position)
-    stampCurrentLine();
-    // Render gutter after data
-    renderGutter();
-    // Show suggestion after server echo settles
-    if (!inAlternateScreen && lineBuffer) {
-      updateSuggestion();
-    }
-
-    // Detect CWD from prompt line after data settles
-    if (!inAlternateScreen) {
-      scheduleCwdDetect();
-    }
+    // xterm.write queues parsing; reading its cursor immediately observes old data.
+    terminal.write(data, () => {
+      if (disposed) return;
+      if (isClear) lineTimestamps.length = 0;
+      stampCurrentLine();
+      renderGutter();
+      if (!inAlternateScreen && lineBuffer) updateSuggestion();
+      if (!inAlternateScreen) scheduleCwdDetect();
+    });
   });
 
   const unsubClose = window.api.ssh.onClose(sessionId, () => {
@@ -489,6 +502,10 @@ function getOrCreateTerminal(sessionId: string, isDark: boolean): CachedTerminal
   });
 
   const ipcCleanup = () => {
+    disposed = true;
+    cancelGutterRender();
+    if (cwdDetectTimer !== null) clearTimeout(cwdDetectTimer);
+    cwdDetectTimer = null;
     dataDisposable.dispose();
     resizeDisposable.dispose();
     scrollDisposable.dispose();
@@ -511,6 +528,7 @@ function getOrCreateTerminal(sessionId: string, isDark: boolean): CachedTerminal
       canvas: gutterCanvas,
       lastViewportTop,
       render: renderGutter,
+      cancelRender: cancelGutterRender,
       disposables: [],
     },
   };
@@ -532,13 +550,14 @@ function getCellHeight(terminal: Terminal): number {
 export default function TerminalView({ sessionId }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const appTheme = useAppStore((s) => s.theme);
+  const terminalConfig = useAppStore((s) => s.terminalConfig);
   const gutterVisible = useAppStore((s) => s.timestampGutterVisible);
 
   useEffect(() => {
     if (!containerRef.current) return;
     const container = containerRef.current;
     const isDark = appTheme === 'dark';
-    const cached = getOrCreateTerminal(sessionId, isDark);
+    const cached = getOrCreateTerminal(sessionId, isDark, terminalConfig);
     const { terminal, fitAddon, wrapper } = cached;
 
     // Initialize terminal DOM — open into the right-side termContainer
@@ -554,12 +573,15 @@ export default function TerminalView({ sessionId }: TerminalViewProps) {
       cached.initialized = true;
     }
 
-    // Update theme
-    terminal.options.theme = getTerminalConfig(isDark).theme;
+    // Keep the cached terminal in sync with the current font settings.
+    const nextConfig = getTerminalConfig(isDark, terminalConfig);
+    terminal.options.fontFamily = nextConfig.fontFamily;
+    terminal.options.fontSize = nextConfig.fontSize;
+    terminal.options.theme = nextConfig.theme;
 
     // Update gutter canvas background on theme change
     const gutterCanvas = cached.gutter.canvas;
-    gutterCanvas.style.backgroundColor = isDark ? '#0d0e1c' : '#d5dbd7';
+    gutterCanvas.style.backgroundColor = isDark ? '#242423' : '#F9F9F7';
 
     // Update gutter visibility
     gutterCanvas.style.display = gutterVisible ? 'block' : 'none';
@@ -568,34 +590,34 @@ export default function TerminalView({ sessionId }: TerminalViewProps) {
     // Move wrapper into this container
     container.appendChild(wrapper);
 
-    // Focus after DOM update
-    requestAnimationFrame(() => {
-      terminal.focus();
-    });
-
-    // Fit to container
+    let detached = false;
+    let fitFrame: number | null = null;
+    // ResizeObserver notifies us when a hidden container becomes visible again.
+    // Do not poll a zero-sized container: old retry loops survive tab changes.
     const doFit = () => {
-      if (container.offsetWidth > 0 && container.offsetHeight > 0) {
+      if (!detached && container.isConnected && container.offsetWidth > 0 && container.offsetHeight > 0) {
         try {
           fitAddon.fit();
           cached.gutter.render();
         } catch { /* ignore */ }
-      } else {
-        setTimeout(doFit, 200);
       }
     };
-    requestAnimationFrame(() => {
+    const scheduleFit = () => {
+      if (detached || fitFrame !== null) return;
+      fitFrame = requestAnimationFrame(() => {
+        fitFrame = null;
+        doFit();
+      });
+    };
+    const initialFrame = requestAnimationFrame(() => {
+      if (detached) return;
+      terminal.focus();
       doFit();
-      setTimeout(doFit, 300);
     });
+    const initialFitTimer = setTimeout(scheduleFit, 300);
 
     // Observe container resize
-    const resizeObserver = new ResizeObserver(() => {
-      try {
-        fitAddon.fit();
-        cached.gutter.render();
-      } catch { /* ignore */ }
-    });
+    const resizeObserver = new ResizeObserver(scheduleFit);
     resizeObserver.observe(container);
 
     // Keyboard shortcuts
@@ -642,6 +664,11 @@ export default function TerminalView({ sessionId }: TerminalViewProps) {
     container.addEventListener('contextmenu', handleContextMenu, true);
 
     return () => {
+      detached = true;
+      cancelAnimationFrame(initialFrame);
+      clearTimeout(initialFitTimer);
+      if (fitFrame !== null) cancelAnimationFrame(fitFrame);
+      cached.gutter.cancelRender();
       resizeObserver.disconnect();
       container.removeEventListener('keydown', handleKeyDown);
       if (xtermTextarea) xtermTextarea.removeEventListener('contextmenu', handleContextMenu, true);
@@ -649,9 +676,16 @@ export default function TerminalView({ sessionId }: TerminalViewProps) {
       if (terminal.element) terminal.element.removeEventListener('contextmenu', handleContextMenu, true);
       container.removeEventListener('contextmenu', handleContextMenu, true);
     };
-  }, [sessionId, appTheme, gutterVisible]);
+  }, [
+    sessionId,
+    appTheme,
+    gutterVisible,
+    terminalConfig.fontFamily,
+    terminalConfig.fontSize,
+    terminalConfig.colorScheme
+  ]);
 
-  const bgColor = appTheme === 'dark' ? '#0d0e1c' : '#d5dbd7';
+  const bgColor = appTheme === 'dark' ? '#242423' : '#F9F9F7';
 
   return (
     <div

@@ -2,16 +2,14 @@ import { app } from 'electron';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import type { HostEntry, ConnectionGroup, AppConfig } from '../../shared/types';
+import { DEFAULT_TERMINAL_CONFIG, normalizeTerminalConfig } from '../../shared/terminal-defaults';
 
 const DEFAULT_APP_CONFIG: AppConfig = {
-  theme: 'dark',
-  terminal: {
-    fontFamily: "'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace",
-    fontSize: 14,
-    colorScheme: 'default'
-  },
+  theme: 'light',
+  terminal: DEFAULT_TERMINAL_CONFIG,
   sidebarCollapsed: false,
-  defaultKeepAlive: 60
+  defaultKeepAlive: 60,
+  autoCheckUpdates: true
 };
 
 interface StoreData {
@@ -37,8 +35,19 @@ function readStore(): StoreData {
   const filePath = getConfigPath();
   try {
     if (existsSync(filePath)) {
-      const raw = readFileSync(filePath, 'utf-8');
-      return { ...DEFAULTS, ...JSON.parse(raw) };
+      const raw = JSON.parse(readFileSync(filePath, 'utf-8')) as Partial<StoreData>;
+      return {
+        ...DEFAULTS,
+        ...raw,
+        hosts: raw.hosts ?? DEFAULTS.hosts,
+        groups: raw.groups ?? DEFAULTS.groups,
+        appConfig: {
+          ...DEFAULT_APP_CONFIG,
+          ...raw.appConfig,
+          terminal: normalizeTerminalConfig(raw.appConfig?.terminal)
+        },
+        commandHistory: raw.commandHistory ?? DEFAULTS.commandHistory
+      };
     }
   } catch {
     // If file is corrupted, return defaults
@@ -82,7 +91,14 @@ export class ConfigStore {
 
   setAppConfig(config: Partial<AppConfig>): void {
     const data = readStore();
-    data.appConfig = { ...data.appConfig, ...config };
+    data.appConfig = {
+      ...data.appConfig,
+      ...config,
+      terminal: normalizeTerminalConfig({
+        ...data.appConfig.terminal,
+        ...config.terminal
+      })
+    };
     writeStore(data);
   }
 

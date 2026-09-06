@@ -23,10 +23,9 @@ export default function LeafPaneWrapper({ paneId, sessionId }: LeafPaneWrapperPr
   const sessions = useAppStore((s) => s.sessions);
   const hosts = useAppStore((s) => s.hosts);
 
-  const appTheme = useAppStore((s) => s.theme);
-  const termBg = appTheme === 'dark' ? '#0d0e1c' : '#d5dbd7';
-  const termFg = appTheme === 'dark' ? 'rgba(228,228,231,0.6)' : 'rgba(46,53,50,0.45)';
-  const termFgBold = appTheme === 'dark' ? 'rgba(228,228,231,0.8)' : 'rgba(46,53,50,0.65)';
+  const termBg = 'var(--color-terminal)';
+  const termFg = 'var(--color-text-muted)';
+  const termFgBold = 'var(--color-text-secondary)';
 
   const activeWs = workspaces.find((w) => w.id === activeTabId);
   const isInWorkspace = !!activeWs && activeWs.sessionIds.includes(sessionId);

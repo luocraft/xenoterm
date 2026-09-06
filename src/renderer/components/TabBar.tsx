@@ -3,6 +3,7 @@ import { useAppStore } from '../store/app-store';
 import { useLayoutStore } from '../store/layout-store';
 import { useT } from '../i18n';
 import { disposeTerminal } from './TerminalView';
+import AppIcon from './AppIcon';
 
 export default function TabBar() {
   const t = useT();
@@ -163,7 +164,7 @@ export default function TabBar() {
   return (
     <div className="flex-shrink-0" style={{ borderBottom: '1px solid var(--color-border)' }}>
     <div
-      className="app-drag flex items-center bg-[var(--color-sidebar)] h-9 px-1 gap-0.5"
+      className="workspace-toolbar app-drag flex items-center h-9 px-2 gap-1"
       style={{ paddingRight: '140px' }}
     >
       {sidebarCollapsed && (
@@ -173,7 +174,7 @@ export default function TabBar() {
           style={{ color: 'var(--color-text-muted)' }}
           title={t('tabBar.showSidebar')}
         >
-          ▶
+          <AppIcon name="collapse" size={16} />
         </button>
       )}
 
@@ -300,7 +301,7 @@ export default function TabBar() {
             style={{ color: timestampGutterVisible ? undefined : 'var(--color-text-muted)' }}
             title={timestampGutterVisible ? t('tabBar.timestamps') : t('tabBar.timestamps')}
           >
-            🕑
+            <AppIcon name="clock" size={16} />
           </button>
           <button
             onClick={toggleCommandHistory}
@@ -310,7 +311,7 @@ export default function TabBar() {
             style={{ color: commandHistoryVisible ? undefined : 'var(--color-text-muted)' }}
             title={commandHistoryVisible ? t('tabBar.cmdHistory') : t('tabBar.cmdHistory')}
           >
-            🕐
+            <AppIcon name="history" size={16} />
           </button>
           <button
             onClick={toggleSplitPane}
@@ -320,7 +321,7 @@ export default function TabBar() {
             style={{ color: splitPaneVisible ? undefined : 'var(--color-text-muted)' }}
             title={splitPaneVisible ? t('tabBar.fileBrowser') : t('tabBar.fileBrowser')}
           >
-            📁
+            <AppIcon name="folder" size={16} />
           </button>
         </>
       )}

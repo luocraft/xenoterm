@@ -14,6 +14,11 @@ export interface J1939Header {
   destinationAddress: number | null; // DA (null for broadcast)
 }
 
+export interface J1939FbffHeader {
+  applicationProtocolIndicator: number;
+  sourceAddress: number;
+}
+
 /** Well-known SA names */
 const SA_NAMES: Record<number, string> = {
   0: 'Engine #1',
@@ -60,6 +65,10 @@ const PGN_NAMES: Record<number, string> = {
   // Transport Protocol
   60416: 'TP.CM - Transport Protocol Connection Management',
   60160: 'TP.DT - Transport Protocol Data Transfer',
+  // J1939-22
+  9472: 'MCPG - FEFF Multi-PG',
+  19712: 'FD.TP.CM - FD Transport Protocol Connection Management',
+  19968: 'FD.TP.DT - FD Transport Protocol Data Transfer',
   // DM messages
   65226: 'DM1 - Active Diagnostic Trouble Codes',
   65227: 'DM2 - Previously Active DTCs',
@@ -99,6 +108,17 @@ export function parseJ1939Id(canId: number): J1939Header {
 }
 
 /**
+ * Parse an 11-bit FBFF CAN ID into J1939-22 AppPI / SA fields.
+ */
+export function parseJ1939FbffId(canId: number): J1939FbffHeader | null {
+  if (canId < 0 || canId > 0x7ff) return null;
+  return {
+    applicationProtocolIndicator: (canId >> 8) & 0x07,
+    sourceAddress: canId & 0xff,
+  };
+}
+
+/**
  * Build a 29-bit extended CAN ID from J1939 fields.
  */
 export function buildJ1939Id(priority: number, pgn: number, sa: number, da?: number): number {
@@ -117,15 +137,193 @@ export function getPGNName(pgn: number): string | undefined {
   return PGN_NAMES[pgn];
 }
 
+export interface J1939FdTpCmMessage {
+  control: number;
+  controlName: 'RTS' | 'CTS' | 'EOMS' | 'EOMA' | 'ABORT' | 'BAM' | 'UNKNOWN';
+  session: number;
+  totalBytes: number;
+  totalSegments: number;
+  maxSegmentsOrSize: number;
+  adtOrRequestOrReason: number;
+  pgn: number;
+  da: number | null;
+  assuranceData: number[];
+  abortRole?: number;
+}
+
+export interface J1939FdTpDtMessage {
+  formatIndicator: number;
+  session: number;
+  segmentNumber: number;
+  payload: number[];
+  da: number | null;
+}
+
+export interface J1939MultiPgMessage {
+  pgn: number;
+  sa: number;
+  da: number | null;
+  data: number[];
+  tos: number;
+  trailerFormat: number;
+  payloadLength: number;
+  assuranceData: number[];
+  frameFormat: 'FEFF' | 'FBFF';
+  applicationProtocolIndicator?: number;
+}
+
+export interface J1939TpMessage {
+  pgn: number;
+  sa: number;
+  da: number | null;
+  data: number[];
+  protocol: 'j1939-21' | 'j1939-22';
+  session?: number;
+}
+
+const J1939_21_TP_CM_PGN = 60416;
+const J1939_21_TP_DT_PGN = 60160;
+const J1939_22_MULTI_PG_PGN = 9472;
+const J1939_22_FD_TP_CM_PGN = 19712;
+const J1939_22_FD_TP_DT_PGN = 19968;
+
+function readUint24LE(data: number[], offset: number): number {
+  return (data[offset] || 0) | ((data[offset + 1] || 0) << 8) | ((data[offset + 2] || 0) << 16);
+}
+
+function getFdTpControlName(control: number): J1939FdTpCmMessage['controlName'] {
+  switch (control) {
+    case 0: return 'RTS';
+    case 1: return 'CTS';
+    case 2: return 'EOMS';
+    case 3: return 'EOMA';
+    case 4: return 'BAM';
+    case 15: return 'ABORT';
+    default: return 'UNKNOWN';
+  }
+}
+
+function getMultiPgTrailerLength(tos: number, trailerFormat: number, payloadLength: number): number {
+  if (tos === 2) return 0;
+  if (tos !== 1) return 0;
+
+  if (trailerFormat === 1 || trailerFormat === 2) return Math.min(4, payloadLength);
+  if (trailerFormat === 3 || trailerFormat === 5 || trailerFormat === 6) return Math.min(8, payloadLength);
+  return 0;
+}
+
+export function parseJ1939FdTpCm(canId: number, data: number[]): J1939FdTpCmMessage | null {
+  const hdr = parseJ1939Id(canId);
+  if (hdr.pgn !== J1939_22_FD_TP_CM_PGN || data.length < 12) return null;
+
+  const control = data[0] & 0x0f;
+  const session = (data[0] >> 4) & 0x0f;
+  const assuranceStart = 12;
+
+  return {
+    control,
+    controlName: getFdTpControlName(control),
+    session,
+    totalBytes: readUint24LE(data, 1),
+    totalSegments: readUint24LE(data, 4),
+    maxSegmentsOrSize: data[7] || 0,
+    adtOrRequestOrReason: data[8] || 0,
+    pgn: readUint24LE(data, 9),
+    da: hdr.destinationAddress,
+    assuranceData: data.slice(assuranceStart),
+    abortRole: control === 15 ? ((data[7] || 0) & 0x03) : undefined,
+  };
+}
+
+export function parseJ1939FdTpDt(canId: number, data: number[]): J1939FdTpDtMessage | null {
+  const hdr = parseJ1939Id(canId);
+  if (hdr.pgn !== J1939_22_FD_TP_DT_PGN || data.length < 4) return null;
+
+  return {
+    formatIndicator: data[0] & 0x0f,
+    session: (data[0] >> 4) & 0x0f,
+    segmentNumber: readUint24LE(data, 1),
+    payload: data.slice(4),
+    da: hdr.destinationAddress,
+  };
+}
+
+export function parseJ1939MultiPg(canId: number, data: number[], extended = true): J1939MultiPgMessage[] {
+  let sourceAddress = 0;
+  let destinationAddress: number | null = null;
+  let frameFormat: 'FEFF' | 'FBFF' = 'FEFF';
+  let applicationProtocolIndicator: number | undefined;
+
+  if (extended) {
+    const hdr = parseJ1939Id(canId);
+    if (hdr.pgn !== J1939_22_MULTI_PG_PGN || data.length < 4) return [];
+    sourceAddress = hdr.sourceAddress;
+    destinationAddress = hdr.destinationAddress;
+  } else {
+    const hdr = parseJ1939FbffId(canId);
+    if (!hdr || hdr.applicationProtocolIndicator !== 0 || data.length < 4) return [];
+    sourceAddress = hdr.sourceAddress;
+    destinationAddress = 0xff;
+    frameFormat = 'FBFF';
+    applicationProtocolIndicator = hdr.applicationProtocolIndicator;
+  }
+
+  const messages: J1939MultiPgMessage[] = [];
+  let offset = 0;
+
+  while (offset < data.length) {
+    const first = data[offset];
+    const tos = first >> 5;
+
+    // TOS 0 is padding and always terminates the Multi-PG payload.
+    if (tos === 0) break;
+    if (offset + 4 > data.length) break;
+
+    const trailerFormat = (first >> 2) & 0x07;
+    const containedPgn = ((first & 0x03) << 16) | (data[offset + 1] << 8) | data[offset + 2];
+    const payloadLength = data[offset + 3];
+    const totalLength = 4 + payloadLength;
+    if (payloadLength > 60 || offset + totalLength > data.length) break;
+
+    // Only TOS=1/2 carry SAE J1939 contained PGs.
+    if (tos === 1 || tos === 2) {
+      const payload = data.slice(offset + 4, offset + totalLength);
+      const trailerLength = getMultiPgTrailerLength(tos, trailerFormat, payloadLength);
+      const pgDataLength = Math.max(0, payload.length - trailerLength);
+      const containedPf = (containedPgn >> 8) & 0xff;
+      messages.push({
+        pgn: containedPgn,
+        sa: sourceAddress,
+        da: containedPf < 240 ? destinationAddress : null,
+        data: payload.slice(0, pgDataLength),
+        tos,
+        trailerFormat,
+        payloadLength,
+        assuranceData: payload.slice(pgDataLength),
+        frameFormat,
+        applicationProtocolIndicator,
+      });
+    }
+
+    offset += totalLength;
+  }
+
+  return messages;
+}
+
 /** TP reassembly state for a single transfer */
 interface TpSession {
+  protocol: 'j1939-21' | 'j1939-22';
   pgn: number;
   totalBytes: number;
   totalPackets: number;
   sa: number;
   da: number | null;
+  session?: number;
   data: Uint8Array;
   received: number; // packets received
+  receivedSegments?: Set<number>;
+  waitingForAck?: boolean;
   timestamp: number;
 }
 
@@ -136,6 +334,14 @@ interface TpSession {
 export class TpReassembler {
   private sessions = new Map<string, TpSession>(); // key: `${sa}-${da ?? 'bcast'}`
   private static readonly TIMEOUT_MS = 5000; // 5s timeout for stale sessions
+
+  private get21Key(sa: number, da: number | null): string {
+    return `21:${sa}:${da == null ? 'bcast' : da}`;
+  }
+
+  private get22Key(sa: number, da: number | null, session: number): string {
+    return `22:${sa}:${da == null ? 'bcast' : da}:${session}`;
+  }
 
   /**
    * Purge sessions that haven't received data within the timeout window.
@@ -151,22 +357,23 @@ export class TpReassembler {
   /**
    * Process a CAN frame. Returns reassembled data if a TP transfer completes, null otherwise.
    */
-  process(canId: number, data: number[], timestamp: number): { pgn: number; sa: number; da: number | null; data: number[] } | null {
+  process(canId: number, data: number[], timestamp: number): J1939TpMessage | null {
     const hdr = parseJ1939Id(canId);
 
     // Periodically clean up stale sessions
     if (this.sessions.size > 0) this.purgeStale(timestamp);
 
     // TP.CM (PGN 60416)
-    if (hdr.pgn === 60416 && data.length >= 8) {
+    if (hdr.pgn === J1939_21_TP_CM_PGN && data.length >= 8) {
       const controlByte = data[0];
       if (controlByte === 32) {
         // BAM
         const totalBytes = data[1] | (data[2] << 8);
         const totalPackets = data[3];
         const pgn = data[5] | (data[6] << 8) | (data[7] << 16);
-        const key = `${hdr.sourceAddress}-bcast`;
+        const key = this.get21Key(hdr.sourceAddress, null);
         this.sessions.set(key, {
+          protocol: 'j1939-21',
           pgn, totalBytes, totalPackets,
           sa: hdr.sourceAddress, da: null,
           data: new Uint8Array(totalBytes),
@@ -178,8 +385,9 @@ export class TpReassembler {
         const totalPackets = data[3];
         const pgn = data[5] | (data[6] << 8) | (data[7] << 16);
         const da = hdr.destinationAddress ?? 0xFF;
-        const key = `${hdr.sourceAddress}-${da}`;
+        const key = this.get21Key(hdr.sourceAddress, da);
         this.sessions.set(key, {
+          protocol: 'j1939-21',
           pgn, totalBytes, totalPackets,
           sa: hdr.sourceAddress, da,
           data: new Uint8Array(totalBytes),
@@ -190,12 +398,12 @@ export class TpReassembler {
     }
 
     // TP.DT (PGN 60160)
-    if (hdr.pgn === 60160 && data.length >= 2) {
+    if (hdr.pgn === J1939_21_TP_DT_PGN && data.length >= 2) {
       const seqNo = data[0]; // 1-based
       // Try both broadcast and point-to-point keys
       const keys = [
-        `${hdr.sourceAddress}-bcast`,
-        `${hdr.sourceAddress}-${hdr.destinationAddress ?? 0xFF}`,
+        this.get21Key(hdr.sourceAddress, null),
+        this.get21Key(hdr.sourceAddress, hdr.destinationAddress ?? 0xFF),
       ];
       for (const key of keys) {
         const session = this.sessions.get(key);
@@ -214,10 +422,104 @@ export class TpReassembler {
             sa: session.sa,
             da: session.da,
             data: Array.from(session.data),
+            protocol: session.protocol,
           };
         }
         return null;
       }
+    }
+
+    const fdTpCm = parseJ1939FdTpCm(canId, data);
+    if (fdTpCm) {
+      const da = fdTpCm.control === 4 || fdTpCm.da === 0xFF ? null : fdTpCm.da;
+      const key = this.get22Key(hdr.sourceAddress, da, fdTpCm.session);
+      const reverseKey = da != null ? this.get22Key(da, hdr.sourceAddress, fdTpCm.session) : key;
+
+      if (fdTpCm.control === 0 || fdTpCm.control === 4) {
+        this.sessions.set(key, {
+          protocol: 'j1939-22',
+          pgn: fdTpCm.pgn,
+          totalBytes: fdTpCm.totalBytes,
+          totalPackets: fdTpCm.totalSegments,
+          sa: hdr.sourceAddress,
+          da,
+          session: fdTpCm.session,
+          data: new Uint8Array(fdTpCm.totalBytes),
+          received: 0,
+          receivedSegments: new Set<number>(),
+          timestamp,
+        });
+        return null;
+      }
+
+      if (fdTpCm.control === 2) {
+        const session = this.sessions.get(key);
+        if (!session) return null;
+
+        session.timestamp = timestamp;
+        const allReceived = session.receivedSegments
+          ? session.receivedSegments.size >= session.totalPackets
+          : session.received >= session.totalPackets;
+        if (!allReceived) return null;
+
+        if (session.da != null) {
+          session.waitingForAck = true;
+          return null;
+        }
+
+        this.sessions.delete(key);
+        return {
+          pgn: session.pgn,
+          sa: session.sa,
+          da: session.da,
+          data: Array.from(session.data),
+          protocol: session.protocol,
+          session: session.session,
+        };
+      }
+
+      if (fdTpCm.control === 3) {
+        const session = this.sessions.get(reverseKey);
+        this.sessions.delete(reverseKey);
+        if (!session || !session.waitingForAck) return null;
+
+        const allReceived = session.receivedSegments
+          ? session.receivedSegments.size >= session.totalPackets
+          : session.received >= session.totalPackets;
+        if (!allReceived) return null;
+
+        return {
+          pgn: session.pgn,
+          sa: session.sa,
+          da: session.da,
+          data: Array.from(session.data),
+          protocol: session.protocol,
+          session: session.session,
+        };
+      }
+
+      if (fdTpCm.control === 15) {
+        this.sessions.delete(reverseKey);
+        this.sessions.delete(key);
+      }
+      return null;
+    }
+
+    const fdTpDt = parseJ1939FdTpDt(canId, data);
+    if (fdTpDt && fdTpDt.formatIndicator === 0) {
+      const da = hdr.destinationAddress === 0xFF ? null : hdr.destinationAddress;
+      const key = this.get22Key(hdr.sourceAddress, da, fdTpDt.session);
+      const session = this.sessions.get(key);
+      if (!session) return null;
+
+      const offset = (fdTpDt.segmentNumber - 1) * 60;
+      for (let i = 0; i < fdTpDt.payload.length && offset + i < session.totalBytes; i++) {
+        session.data[offset + i] = fdTpDt.payload[i];
+      }
+      session.receivedSegments?.add(fdTpDt.segmentNumber);
+      session.received = session.receivedSegments ? session.receivedSegments.size : session.received + 1;
+      session.timestamp = timestamp;
+      return null;
     }
 
     return null;

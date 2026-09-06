@@ -1,28 +1,17 @@
-// XenoTerm License Server Configuration
-// IMPORTANT: Change these values before deploying!
-
+const fs = require('fs');
+const path = require('path');
+const dataDir = process.env.XENOTERM_DATA_DIR || path.join(__dirname, 'data');
+let adminToken = process.env.XENOTERM_ADMIN_TOKEN || '';
+if (!adminToken) {
+  try { adminToken = fs.readFileSync(path.join(dataDir, '.admin-token'), 'utf8').trim(); } catch {}
+}
 module.exports = {
-  // Server
-  port: 3000,
-
-  // YunGouOS - Replace with your real credentials
-  // Register at https://merchant.yungouos.com
-  yungouos: {
-    merchantId: 'YOUR_MERCHANT_ID',   // YunGouOS 商户号
-    apiKey: 'YOUR_API_KEY',           // YunGouOS 商户密钥
+  port: Number(process.env.PORT || 3000),
+  host: process.env.XENOTERM_HOST || '127.0.0.1',
+  dataDir,
+  adminToken,
+  downloads: {
+    dir: process.env.XENOTERM_DOWNLOADS_DIR || path.resolve(__dirname, '../xenoterm-website/downloads'),
+    publicBaseUrl: process.env.XENOTERM_PUBLIC_BASE_URL || 'https://xenotech.net',
   },
-
-  // Product
-  product: {
-    name: 'XenoTerm License',
-    price: 49.00,  // CNY, 年订阅价格
-    trialDays: 15,
-  },
-
-  // License signing secret (change this to a random string!)
-  licenseSecret: '012a91f83ff088b7876cf490a16d1f8ad77a24a5179edd1664876b7e1c0ba406',
-
-  // Callback URL - set to your domain after DNS setup
-  // e.g. https://api.yourdomain.com/api/pay/callback
-  callbackUrl: 'http://39.105.198.48:3000/api/pay/callback',
 };

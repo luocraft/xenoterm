@@ -1,245 +1,88 @@
 const express = require('express');
-const cors = require('cors');
 const crypto = require('crypto');
-const { v4: uuidv4 } = require('uuid');
-const md5 = require('md5');
 const fs = require('fs');
 const path = require('path');
-const config = require('./config');
 
-// Ensure data directory exists
-const dataDir = path.join(__dirname, 'data');
-if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-
-const { stmts } = require('./db');
-
-const app = express();
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-// ============ Helper ============
-
-function generateLicenseKey() {
-  // Format: XENO-XXXX-XXXX-XXXX-XXXX
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  const segments = [];
-  for (let i = 0; i < 4; i++) {
-    let seg = '';
-    for (let j = 0; j < 4; j++) {
-      seg += chars[crypto.randomInt(chars.length)];
+function createApp({ config, store }) {
+  const app = express();
+  app.disable('x-powered-by');
+  app.set('trust proxy', 'loopback');
+  app.use(express.json({ limit: '16kb' }));
+  const downloadRoot = path.resolve(config.downloads.dir);
+  const digest = value => crypto.createHash('sha256').update(value).digest();
+  const failedAuth = new Map();
+  function requireAdmin(req, res, next) {
+    res.set('Cache-Control', 'no-store');
+    if (!config.adminToken) return res.status(503).json({ error: '管理密钥尚未配置' });
+    const now = Date.now();
+    for (const [ip, value] of failedAuth) if (value.until < now) failedAuth.delete(ip);
+    const attempts = failedAuth.get(req.ip);
+    if (attempts?.count >= 20) return res.status(429).json({ error: '尝试次数过多，请一分钟后重试' });
+    const token = (req.get('authorization') || '').replace(/^Bearer /, '');
+    if (!crypto.timingSafeEqual(digest(token), digest(config.adminToken))) {
+      failedAuth.set(req.ip, { count: (attempts?.count || 0) + 1, until: attempts?.until || now + 60000 });
+      return res.status(401).json({ error: '管理密钥不正确' });
     }
-    segments.push(seg);
+    failedAuth.delete(req.ip);
+    next();
   }
-  return 'XENO-' + segments.join('-');
-}
-
-function signLicense(licenseKey, machineId) {
-  return crypto
-    .createHmac('sha256', config.licenseSecret)
-    .update(`${licenseKey}:${machineId}`)
-    .digest('hex');
-}
-
-// YunGouOS sign: sort params alphabetically, concat as key=value&, append &key=API_KEY, then MD5 uppercase
-function yungouosSign(params) {
-  const sorted = Object.keys(params).sort();
-  const str = sorted.map((k) => `${k}=${params[k]}`).join('&');
-  return md5(str + '&key=' + config.yungouos.apiKey).toUpperCase();
-}
-
-// ============ Routes ============
-
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', time: new Date().toISOString() });
-});
-
-// Create payment order (called by Electron client)
-app.post('/api/pay/create', async (req, res) => {
-  try {
-    const { payType = 'native' } = req.body; // native = scan QR code
-    const orderId = uuidv4();
-    const outTradeNo = 'XT' + Date.now() + crypto.randomInt(1000, 9999);
-
-    // Save order to DB
-    stmts.createOrder.run(orderId, outTradeNo, config.product.price, 'pending');
-
-    // Call YunGouOS API to create payment
-    const params = {
-      out_trade_no: outTradeNo,
-      total_fee: String(config.product.price),
-      mch_id: config.yungouos.merchantId,
-      body: config.product.name,
-      notify_url: config.callbackUrl,
-    };
-    params.sign = yungouosSign(params);
-
-    // Determine API endpoint based on pay type
-    const apiUrl =
-      payType === 'alipay'
-        ? 'https://api.pay.yungouos.com/api/pay/alipay/nativePay'
-        : 'https://api.pay.yungouos.com/api/pay/wxpay/nativePay';
-
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams(params).toString(),
-    });
-    const result = await response.json();
-
-    if (result.code === 0 && result.data) {
-      res.json({
-        success: true,
-        orderId,
-        outTradeNo,
-        qrCodeUrl: result.data, // QR code image URL or payment URL
+  function resolveFile(file) {
+    if (!/^(?:XenoTerm-Setup-\d+\.\d+\.\d+\.exe(?:\.blockmap)?|latest\.yml)$/.test(file)) return null;
+    const target = path.join(downloadRoot, file);
+    try {
+      const real = fs.realpathSync(target);
+      if (!real.startsWith(fs.realpathSync(downloadRoot) + path.sep) || !fs.statSync(real).isFile()) return null;
+      return real;
+    } catch { return null; }
+  }
+  function serveDownload(req, res, next) {
+    const file = req.params.fileName;
+    const target = resolveFile(file);
+    if (!target) return res.status(404).json({ success: false, error: '文件不存在' });
+    const version = /\d+\.\d+\.\d+/.exec(file)?.[0] || (file === 'latest.yml' ? /^version:\s*(\S+)/m.exec(fs.readFileSync(target, 'utf8'))?.[1] : null);
+    const type = file === 'latest.yml' ? 'update_check' : req.path.startsWith('/api/update/') ? 'update_download' : 'manual_download';
+    const source = type === 'update_check' || type === 'update_download' ? 'auto-updater' : 'website';
+    // Count served downloads, not HEAD checks, failed transfers, blockmaps or
+    // resumed chunks. Coalesce retries by client + file for 30 minutes.
+    if (req.method === 'GET' && (file === 'latest.yml' || file.endsWith('.exe'))) {
+      const key = crypto.createHmac('sha256', config.adminToken || 'local-stats').update(`${req.ip}|${req.get('user-agent') || ''}|${file}`).digest('hex');
+      res.on('finish', () => {
+        const firstRange = /^bytes 0-/i.test(res.getHeader('content-range') || '');
+        if (res.statusCode === 200 || (res.statusCode === 206 && firstRange)) {
+          try { store.record({ type, file, version, source }, key); } catch (err) { console.error('[stats]', err.message); }
+        }
       });
-    } else {
-      res.json({ success: false, error: result.msg || 'Payment creation failed' });
     }
-  } catch (err) {
-    console.error('Create payment error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    if (file === 'latest.yml') res.set('Cache-Control', 'no-cache');
+    if (file.endsWith('.exe')) res.attachment(file);
+    res.sendFile(target, err => { if (err) next(err); });
   }
-});
-
-// YunGouOS payment callback (called by YunGouOS server)
-app.post('/api/pay/callback', (req, res) => {
-  try {
-    const { code, outTradeNo, sign, ...rest } = req.body;
-
-    // Verify sign
-    const checkParams = { ...rest, code, outTradeNo };
-    delete checkParams.sign;
-    const expectedSign = yungouosSign(checkParams);
-
-    if (sign !== expectedSign) {
-      console.warn('Invalid callback sign');
-      return res.send('FAIL');
-    }
-
-    if (code !== 1 && code !== '1') {
-      return res.send('FAIL');
-    }
-
-    // Payment successful - generate license
-    const order = stmts.getOrderByTradeNo.get(outTradeNo);
-    if (!order) {
-      console.warn('Order not found:', outTradeNo);
-      return res.send('FAIL');
-    }
-
-    if (order.status === 'paid') {
-      // Already processed
-      return res.send('SUCCESS');
-    }
-
-    const licenseKey = generateLicenseKey();
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 365);
-    const expiresAtStr = expiresAt.toISOString();
-
-    stmts.updateOrderPaid.run('paid', licenseKey, outTradeNo);
-    stmts.createLicense.run(licenseKey, order.id, 'active');
-    stmts.updateLicenseExpiry.run(expiresAtStr, licenseKey);
-
-    console.log(`Payment success: ${outTradeNo} -> License: ${licenseKey}, expires: ${expiresAtStr}`);
-    res.send('SUCCESS');
-  } catch (err) {
-    console.error('Callback error:', err);
-    res.send('FAIL');
-  }
-});
-
-// Query order status & get license key (polled by Electron client)
-app.get('/api/pay/query/:orderId', (req, res) => {
-  const order = stmts.getOrder.get(req.params.orderId);
-  if (!order) {
-    return res.status(404).json({ success: false, error: 'Order not found' });
-  }
-  res.json({
-    success: true,
-    status: order.status,
-    licenseKey: order.status === 'paid' ? order.license_key : null,
+  app.get('/api/health', (req, res) => res.json({ status: 'ok', edition: 'free', time: new Date().toISOString() }));
+  app.get('/api/release', (req, res) => {
+    res.set('Cache-Control', 'no-cache');
+    try {
+      const release = JSON.parse(fs.readFileSync(path.join(downloadRoot, 'release.json'), 'utf8'));
+      if (!resolveFile(release.fileName)) throw Error('missing release');
+      res.json({ ...release, free: true, downloadUrl: '/api/download/' + release.fileName });
+    } catch { res.status(503).json({ error: '安装包暂不可用，请稍后重试' }); }
   });
-});
-
-// Activate license (bind to machine)
-app.post('/api/license/activate', (req, res) => {
-  const { licenseKey, machineId } = req.body;
-  if (!licenseKey || !machineId) {
-    return res.status(400).json({ success: false, error: 'Missing licenseKey or machineId' });
-  }
-
-  const license = stmts.getLicense.get(licenseKey);
-  if (!license) {
-    return res.json({ success: false, error: 'Invalid license key' });
-  }
-  if (license.status !== 'active') {
-    return res.json({ success: false, error: 'License is not active' });
-  }
-  if (license.machine_id && license.machine_id !== machineId) {
-    return res.json({ success: false, error: 'License already bound to another machine' });
-  }
-
-  stmts.activateLicense.run(machineId, licenseKey, machineId);
-  const signature = signLicense(licenseKey, machineId);
-
-  res.json({ success: true, licenseKey, machineId, signature, expiresAt: license.expires_at });
-});
-
-// Verify license (called by Electron client on startup)
-app.post('/api/license/verify', (req, res) => {
-  const { licenseKey, machineId } = req.body;
-  if (!licenseKey || !machineId) {
-    return res.status(400).json({ success: false, valid: false });
-  }
-
-  const license = stmts.getLicense.get(licenseKey);
-  if (!license || license.status !== 'active' || license.machine_id !== machineId) {
-    return res.json({ success: true, valid: false });
-  }
-
-  // 检查是否过期
-  if (license.expires_at && new Date() > new Date(license.expires_at)) {
-    return res.json({ success: true, valid: false, expired: true, expiresAt: license.expires_at });
-  }
-
-  const signature = signLicense(licenseKey, machineId);
-  res.json({ success: true, valid: true, signature, expiresAt: license.expires_at });
-});
-
-// Renew license (extend by 365 days)
-app.post('/api/license/renew', (req, res) => {
-  const { licenseKey, machineId } = req.body;
-  if (!licenseKey || !machineId) {
-    return res.status(400).json({ success: false, error: 'Missing licenseKey or machineId' });
-  }
-
-  const license = stmts.getLicense.get(licenseKey);
-  if (!license || license.machine_id !== machineId) {
-    return res.json({ success: false, error: 'Invalid license or machine mismatch' });
-  }
-
-  // 从今天起续期365天
-  const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + 365);
-  const expiresAtStr = expiresAt.toISOString();
-
-  stmts.updateLicenseExpiry.run(expiresAtStr, licenseKey);
-  // 确保状态为 active
-  if (license.status !== 'active') {
-    stmts.activateLicense.run(machineId, licenseKey, machineId);
-  }
-
-  const signature = signLicense(licenseKey, machineId);
-  console.log(`License renewed: ${licenseKey}, new expiry: ${expiresAtStr}`);
-  res.json({ success: true, expiresAt: expiresAtStr, signature });
-});
-
-// ============ Start ============
-
-app.listen(config.port, '0.0.0.0', () => {
-  console.log(`XenoTerm License Server running on port ${config.port}`);
-});
+  app.get(['/api/download/:fileName', '/api/update/:fileName', '/downloads/:fileName'], serveDownload);
+  app.get('/api/stats/downloads', requireAdmin, (req, res) => {
+    const days = Math.max(1, Math.min(365, Number.parseInt(req.query.days, 10) || 30));
+    res.json({ success: true, ...store.stats(days) });
+  });
+  // Older clients must upgrade; these endpoints can no longer create charges.
+  app.all(['/api/pay/*', '/api/license/*'], (req, res) => res.status(410).json({ success: false, free: true, code: 'FREE_EDITION', error: 'XenoTerm 已免费，请下载新版，无需购买或激活。', downloadUrl: config.downloads.publicBaseUrl }));
+  app.use((err, req, res, next) => {
+    if (res.headersSent) return next(err);
+    res.status(err.status || 500).json({ error: err.status === 416 ? '无效的下载范围' : '请求未完成' });
+  });
+  return app;
+}
+if (require.main === module) {
+  const config = require('./config');
+  const store = require('./db').createStore(path.join(config.dataDir, 'license.db'));
+  const server = createApp({ config, store }).listen(config.port, config.host, () => console.log(`XenoTerm free server listening on ${config.host}:${config.port}`));
+  for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => server.close(() => { store.close(); process.exit(0); }));
+}
+module.exports = { createApp };

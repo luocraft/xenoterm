@@ -1,20 +1,23 @@
 /**
- * CAN service — manages drivers, sessions, polling, and event dispatch.
+ * CAN service - manages drivers, sessions, polling, and event dispatch.
  */
 import { randomUUID } from 'crypto';
 import type { CanDriver, CanFrame, CanOpenConfig, CanDeviceType } from './can-driver.interface';
+import { decodeCanErrCode } from './can-driver.interface';
 import { ZlgCanDriver } from './can-driver-zlg';
+import { ZlgControlCanDriver } from './can-driver-zlg-control';
 import { GcCanDriver } from './can-driver-gc';
 import { GcCanFdDriver } from './can-driver-gc-fd';
 import type { CanFdOpenConfig } from './can-driver-gc-fd';
 import { VirtualCanDriver } from './can-driver-virtual';
-import { PeakCanDriver } from './can-driver-peak';
-import { KvaserCanDriver } from './can-driver-kvaser';
-import { VectorCanDriver } from './can-driver-vector';
+import { TosunCanDriver } from './can-driver-tosun';
 import { parseDbc, type DbcDatabase } from './dbc-parser';
 import { readFileSync } from 'fs';
-import { IsoTpTransport, type IsoTpConfig } from './iso-tp';
+import { type IsoTpConfig } from './iso-tp';
 import { UdsService, type UdsResponse, type UdsLogEntry } from './uds-service';
+
+const CAN_POLL_INTERVAL_MS = 1;
+const CAN_POLL_BATCH_SIZE = 200;
 
 export interface CanSession {
   id: string;
@@ -33,29 +36,28 @@ interface SessionState {
   pollTimer: ReturnType<typeof setInterval> | null;
   onData: ((frames: CanFrame[]) => void) | null;
   onError: ((error: string) => void) | null;
+  onBusError: ((info: { errCode: number; errTypes: string[]; timestamp: number }) => void) | null;
+  lastErrCode?: number;
 }
 
 export class CanService {
   private drivers: Map<string, CanDriver> = new Map();
   private sessions: Map<string, SessionState> = new Map();
-  // UDS: key = `${sessionId}:${txId}:${rxId}`
   private udsInstances: Map<string, UdsService> = new Map();
 
   constructor() {
     const zlg = new ZlgCanDriver();
+    const zlgControl = new ZlgControlCanDriver();
     const gc = new GcCanDriver();
     const gcFd = new GcCanFdDriver();
     const virtual_ = new VirtualCanDriver();
-    const peak = new PeakCanDriver();
-    const kvaser = new KvaserCanDriver();
-    const vector = new VectorCanDriver();
+    const tosun = new TosunCanDriver();
     this.drivers.set(zlg.name, zlg);
+    this.drivers.set(zlgControl.name, zlgControl);
     this.drivers.set(gc.name, gc);
     this.drivers.set(gcFd.name, gcFd);
     this.drivers.set(virtual_.name, virtual_);
-    this.drivers.set(peak.name, peak);
-    this.drivers.set(kvaser.name, kvaser);
-    this.drivers.set(vector.name, vector);
+    this.drivers.set(tosun.name, tosun);
   }
 
   listDrivers(): { name: string; available: boolean }[] {
@@ -67,36 +69,41 @@ export class CanService {
 
   getDeviceTypes(driverName: string): CanDeviceType[] {
     const driver = this.drivers.get(driverName);
-    if (!driver) throw new Error(`Unknown driver: ${driverName}`);
+    if (!driver) throw new Error('Unknown driver: ' + driverName);
     return driver.getDeviceTypes();
   }
-
   open(driverName: string, config: CanOpenConfig, fdConfig?: CanFdOpenConfig): CanSession | CanSession[] {
     const driver = this.drivers.get(driverName);
-    if (!driver) throw new Error(`Unknown driver: ${driverName}`);
-    if (!driver.isAvailable()) throw new Error(`Driver ${driverName} DLL not found. Please place the DLL in resources/can/ directory.`);
+    if (!driver) throw new Error('Unknown driver: ' + driverName);
+    if (!driver.isAvailable()) throw new Error('Driver ' + driverName + ' DLL not found.');
 
-    // If FD driver, set FD-specific config before open
+    const existingSessions = Array.from(this.sessions.values()).filter(
+      (s) => s.driver === driver && s.session.status === 'connected'
+    );
+    if (existingSessions.length > 0) {
+      throw new Error('Driver ' + driverName + ' is already connected.');
+    }
+
     if (fdConfig && driver instanceof GcCanFdDriver) {
       driver.setFdConfig(fdConfig);
     }
 
     driver.open(config);
 
-    // All multi-channel drivers now open all channels at once — create a session for each
     const chCount = 'getChannelCount' in driver ? (driver as any).getChannelCount() as number : 1;
     const isMultiChannel = chCount > 1;
     const channelsToCreate = isMultiChannel ? Array.from({ length: chCount }, (_, i) => i) : [config.channel];
 
     const sessions: CanSession[] = channelsToCreate.map((ch) => {
       const ch1Baud = fdConfig?.ch1BaudRate ?? config.ch1BaudRate;
+      const chBaud = config.chBaudRates?.[ch] ?? (ch === 1 && ch1Baud ? ch1Baud : config.baudRate);
       const session: CanSession = {
         id: randomUUID(),
         driverName,
         deviceType: config.deviceType,
         deviceIndex: config.deviceIndex,
         channel: ch,
-        baudRate: (ch === 1 && ch1Baud) ? ch1Baud : config.baudRate,
+        baudRate: chBaud,
         status: 'connected',
       };
 
@@ -107,14 +114,28 @@ export class CanService {
         pollTimer: null,
         onData: null,
         onError: null,
+        onBusError: null,
       };
 
       this.sessions.set(session.id, state);
 
-      // Start polling for this channel
       state.pollTimer = setInterval(() => {
         try {
-          const frames = driver.receive(ch, 200);
+          const frames = driver.receive(ch, CAN_POLL_BATCH_SIZE);
+          if ((driver as any).readError && state.onBusError) {
+            const errInfo = (driver as any).readError(ch);
+            const newErrCode = errInfo?.errCode ?? 0;
+            if (newErrCode !== (state.lastErrCode ?? 0)) {
+              state.lastErrCode = newErrCode;
+              if (newErrCode !== 0) {
+                state.onBusError({
+                  errCode: newErrCode,
+                  errTypes: decodeCanErrCode(newErrCode),
+                  timestamp: Date.now(),
+                });
+              }
+            }
+          }
           if (frames.length > 0 && state.onData) {
             state.onData(frames);
           }
@@ -123,7 +144,7 @@ export class CanService {
             state.onError((err as Error).message);
           }
         }
-      }, 1);
+      }, CAN_POLL_INTERVAL_MS);
 
       return session;
     });
@@ -135,21 +156,16 @@ export class CanService {
     const state = this.sessions.get(sessionId);
     if (!state) return;
     if (state.pollTimer) clearInterval(state.pollTimer);
-
-    // Clean up UDS instances for this session
     this.udsDestroyAll(sessionId);
 
-    // For FD driver, check if sibling session still exists
     const hasSibling = Array.from(this.sessions.values()).some(
       (s) => s !== state && s.driver === state.driver && s.session.status === 'connected'
     );
 
     try {
       if (hasSibling) {
-        // Only stop this channel, keep device open for sibling
         state.driver.close(state.channel);
       } else {
-        // Last session for this driver — close everything
         state.driver.close();
       }
     } catch { /* ignore */ }
@@ -160,7 +176,11 @@ export class CanService {
   send(sessionId: string, frames: CanFrame[]): number {
     const state = this.sessions.get(sessionId);
     if (!state) throw new Error('Session not found');
-    return state.driver.send(state.channel, frames);
+    const sent = state.driver.send(state.channel, frames);
+    if (sent < frames.length) {
+      throw new Error(`CAN send failed (${sent}/${frames.length})`);
+    }
+    return sent;
   }
 
   onData(sessionId: string, callback: (frames: CanFrame[]) => void): void {
@@ -171,6 +191,11 @@ export class CanService {
   onError(sessionId: string, callback: (error: string) => void): void {
     const state = this.sessions.get(sessionId);
     if (state) state.onError = callback;
+  }
+
+  onBusError(sessionId: string, callback: (info: { errCode: number; errTypes: string[]; timestamp: number }) => void): void {
+    const state = this.sessions.get(sessionId);
+    if (state) state.onBusError = callback;
   }
 
   parseDbcFile(filePath: string): DbcDatabase {
@@ -188,7 +213,6 @@ export class CanService {
     return `${sessionId}:${txId}:${rxId}`;
   }
 
-  /** Create or reuse a UDS instance for a given session + txId/rxId pair */
   private getOrCreateUds(sessionId: string, txId: number, rxId: number, onLog?: (entry: UdsLogEntry) => void): UdsService {
     const key = this.getUdsKey(sessionId, txId, rxId);
     let uds = this.udsInstances.get(key);
@@ -216,12 +240,9 @@ export class CanService {
     uds = new UdsService(config, sendFrame);
     if (onLog) uds.setOnLog(onLog);
 
-    // Hook into the session's data callback to feed rxId frames to ISO-TP
     const origOnData = state.onData;
     state.onData = (frames: CanFrame[]) => {
-      // Forward to original callback (trace display)
       origOnData?.(frames);
-      // Feed matching rxId frames to UDS
       for (const f of frames) {
         if (f.id === rxId) {
           uds!.processFrame(f);
@@ -233,26 +254,22 @@ export class CanService {
     return uds;
   }
 
-  /** Send a UDS request and return the response */
   async udsRequest(sessionId: string, txId: number, rxId: number, payload: number[], onLog?: (entry: UdsLogEntry) => void): Promise<UdsResponse> {
     const uds = this.getOrCreateUds(sessionId, txId, rxId, onLog);
     return uds.request(payload);
   }
 
-  /** Start TesterPresent heartbeat */
   udsStartTesterPresent(sessionId: string, txId: number, rxId: number, intervalMs?: number): void {
     const uds = this.getOrCreateUds(sessionId, txId, rxId);
     uds.startTesterPresent(intervalMs);
   }
 
-  /** Stop TesterPresent heartbeat */
   udsStopTesterPresent(sessionId: string, txId: number, rxId: number): void {
     const key = this.getUdsKey(sessionId, txId, rxId);
     const uds = this.udsInstances.get(key);
     if (uds) uds.stopTesterPresent();
   }
 
-  /** Destroy UDS instance */
   udsDestroy(sessionId: string, txId: number, rxId: number): void {
     const key = this.getUdsKey(sessionId, txId, rxId);
     const uds = this.udsInstances.get(key);
@@ -262,7 +279,6 @@ export class CanService {
     }
   }
 
-  /** Destroy all UDS instances for a session */
   private udsDestroyAll(sessionId: string): void {
     for (const [key, uds] of this.udsInstances) {
       if (key.startsWith(sessionId + ':')) {

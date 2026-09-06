@@ -1,6 +1,6 @@
 # XenoTerm
 
-一个基于 Electron + React 构建的现代化 SSH 客户端桌面应用。
+免费的终端与设备调试工作台，基于 Electron + React 构建。SSH、SFTP、串口、TCP/UDP 与 CAN 功能全部开放，无需注册或激活，离线也可使用。
 
 ![Electron](https://img.shields.io/badge/Electron-28-47848F?logo=electron)
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react)

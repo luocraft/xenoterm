@@ -93,6 +93,9 @@ const FD_DLC_TO_LEN: Record<number, number> = {
   0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8,
   9: 12, 10: 16, 11: 20, 12: 24, 13: 32, 14: 48, 15: 64,
 };
+const CANFD_OBJ_SIZE = 80;
+const CANFD_OBJ_ID_OFFSET = 4;
+const CANFD_OBJ_DATA_OFFSET = 16;
 
 export function fdDlcToLength(dlc: number): number {
   return FD_DLC_TO_LEN[dlc] ?? dlc;
@@ -231,6 +234,10 @@ export class GcCanFdDriver implements CanDriver {
   private rxThreadStarted = false;
   private fdConfig: CanFdOpenConfig | null = null;
   private detectedChannelCount = 2; // default, updated by BOARD_INFO
+  // Reuse one raw output buffer so ReceiveFD does not rebuild JS wrapper arrays every poll.
+  private rxBuffer: Buffer | null = null;
+  private rxCapacity = 0;
+  private rxLenArr: number[] = [0];
 
   private deviceKey(): string {
     return `${this.deviceType}:${this.deviceIndex}`;
@@ -447,6 +454,8 @@ export class GcCanFdDriver implements CanDriver {
       } catch { /* ignore */ }
       openDevices.delete(key);
       this.rxThreadStarted = false;
+      this.rxBuffer = null;
+      this.rxCapacity = 0;
     }
 
     this.opened = channels.size > 0;
@@ -489,24 +498,24 @@ export class GcCanFdDriver implements CanDriver {
     }
   }
 
+  private ensureRxBuf(size: number): void {
+    if (!this.rxBuffer || this.rxCapacity < size) {
+      this.rxBuffer = Buffer.alloc(CANFD_OBJ_SIZE * size);
+      this.rxCapacity = size;
+    }
+  }
+
   receive(channel: number, maxCount: number): CanFrame[] {
     if (!openDevices.get(this.deviceKey())?.size) return [];
-    const buf = new Array(maxCount).fill(null).map(() => ({
-      CanORCanfdType: 0,
-      DataLen: 0,
-      Reserved: [0, 0],
-      ID: 0,
-      TimeStamp: { mday: 0, hour: 0, minute: 0, second: 0, millisecond: 0, microsecond: 0 },
-      Data: new Array(64).fill(0),
-    }));
+    this.ensureRxBuf(maxCount);
+    const buf = this.rxBuffer!;
 
-    // ReceiveFD uses DWORD* Len — pass array of 1 element as pointer
-    const lenArr = [maxCount];
+    this.rxLenArr[0] = maxCount;
 
     let ret: number;
     try {
       ret = (this.fns.ReceiveFD as Function)(
-        this.deviceType, this.deviceIndex, channel, buf, lenArr
+        this.deviceType, this.deviceIndex, channel, buf, this.rxLenArr
       ) as number;
     } catch {
       return [];
@@ -514,29 +523,35 @@ export class GcCanFdDriver implements CanDriver {
 
     if (ret !== 0) return [];
 
-    const count = lenArr[0];
+    const count = this.rxLenArr[0];
     if (count <= 0) return [];
 
     const now = Date.now();
-    return buf.slice(0, count).map((obj) => {
-      const flags = obj.CanORCanfdType;
+    const frames: CanFrame[] = [];
+    for (let i = 0; i < count; i++) {
+      const base = i * CANFD_OBJ_SIZE;
+      const flags = buf[base];
       const isFd = (flags & 0x01) !== 0;
       const isExtended = (flags & 0x02) !== 0;
       const isRemote = (flags & 0x04) !== 0;
       const isBrs = (flags & 0x08) !== 0;
-      const dataLen = isFd ? fdDlcToLength(obj.DataLen) : Math.min(obj.DataLen, 8);
+      const dlc = buf[base + 1];
+      const dataLen = isFd ? fdDlcToLength(dlc) : Math.min(dlc, 8);
+      const data = new Array(dataLen);
+      for (let j = 0; j < dataLen; j++) data[j] = buf[base + CANFD_OBJ_DATA_OFFSET + j];
 
-      return {
-        id: obj.ID,
+      frames.push({
+        id: buf.readUInt32LE(base + CANFD_OBJ_ID_OFFSET),
         extended: isExtended,
         remote: isRemote,
-        dlc: obj.DataLen,
-        data: Array.from(obj.Data).slice(0, dataLen),
+        dlc,
+        data,
         timestamp: now,
         direction: 'rx' as const,
         fd: isFd,
         brs: isBrs,
-      };
-    });
+      });
+    }
+    return frames;
   }
 }

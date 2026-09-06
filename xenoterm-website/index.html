@@ -1,189 +1,34 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>XenoTerm - Universal Embedded Debug Station</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-      background: #0a0a1a;
-      color: #e2e8f0;
-      min-height: 100vh;
-      overflow-x: hidden;
-    }
-    .bg-glow {
-      position: fixed; top: -200px; right: -200px;
-      width: 600px; height: 600px; border-radius: 50%;
-      background: radial-gradient(circle, rgba(99,102,241,0.08), transparent);
-      pointer-events: none; z-index: 0;
-    }
-    .bg-glow2 {
-      position: fixed; bottom: -150px; left: -150px;
-      width: 500px; height: 500px; border-radius: 50%;
-      background: radial-gradient(circle, rgba(139,92,246,0.06), transparent);
-      pointer-events: none; z-index: 0;
-    }
-    nav {
-      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
-      backdrop-filter: blur(20px); background: rgba(10,10,26,0.8);
-      border-bottom: 1px solid rgba(255,255,255,0.06);
-    }
-    .nav-inner {
-      max-width: 1100px; margin: 0 auto; padding: 0 24px;
-      height: 60px; display: flex; align-items: center; justify-content: space-between;
-    }
-    .logo { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; }
-    .logo span { color: #6366f1; }
-    .nav-links { display: flex; gap: 28px; }
-    .nav-links a {
-      color: #94a3b8; text-decoration: none; font-size: 13px; font-weight: 500;
-      transition: color 0.2s;
-    }
-    .nav-links a:hover { color: #e2e8f0; }
-    .hero {
-      padding: 160px 24px 80px; position: relative; z-index: 1;
-      text-align: center;
-    }
-    .hero-badge {
-      display: inline-block; padding: 4px 14px; border-radius: 20px; font-size: 11px;
-      font-weight: 600; letter-spacing: 0.5px; margin-bottom: 20px;
-      background: rgba(99,102,241,0.12); color: #818cf8; border: 1px solid rgba(99,102,241,0.2);
-    }
-    .hero h1 {
-      font-size: 48px; font-weight: 800; letter-spacing: -1.5px; line-height: 1.1;
-      margin-bottom: 16px;
-      background: linear-gradient(135deg, #e2e8f0, #6366f1);
-      -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
-    }
-    .hero p { font-size: 16px; color: #94a3b8; max-width: 520px; margin: 0 auto 36px; line-height: 1.7; }
-    .hero-buttons { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
-    .btn-primary {
-      display: inline-flex; align-items: center; gap: 8px;
-      padding: 12px 28px; border-radius: 10px; font-size: 14px; font-weight: 600;
-      text-decoration: none; transition: all 0.2s;
-      background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #fff;
-      box-shadow: 0 4px 20px rgba(99,102,241,0.3);
-    }
-    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(99,102,241,0.4); }
-    .btn-secondary {
-      display: inline-flex; align-items: center; gap: 8px;
-      padding: 12px 28px; border-radius: 10px; font-size: 14px; font-weight: 600;
-      text-decoration: none; transition: all 0.2s;
-      background: rgba(255,255,255,0.06); color: #e2e8f0;
-      border: 1px solid rgba(255,255,255,0.1);
-    }
-    .btn-secondary:hover { background: rgba(255,255,255,0.1); }
-    .hero-meta { margin-top: 20px; font-size: 11px; color: #64748b; }
-    .feature-card {
-      padding: 28px; border-radius: 14px; background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.06); transition: all 0.2s;
-    }
-    .feature-card:hover { background: rgba(255,255,255,0.06); transform: translateY(-2px); }
-  </style>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="XenoTerm 免费终端与设备调试工作台。SSH、SFTP、串口、网络与 CAN，全部功能免费，无需注册或激活。">
+  <title>XenoTerm — 免费终端与设备调试工作台</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="/site.css">
 </head>
 <body>
-  <div class="bg-glow"></div>
-  <div class="bg-glow2"></div>
-
-  <nav>
-    <div class="nav-inner">
-      <div class="logo"><span>Xeno</span>Term</div>
-      <div class="nav-links">
-        <a href="#features">Features</a>
-        <a href="#download">Download</a>
-        <a href="#pricing">Pricing</a>
+  <header class="shell header"><a class="brand" href="/" aria-label="XenoTerm 首页"><img src="/icon.svg" alt="" width="34" height="34">XenoTerm</a><nav aria-label="主导航"><a href="#features">功能</a><a href="/help.html">使用指南</a><a class="nav-download" href="#download">免费下载 <span aria-hidden="true">↗</span></a></nav></header>
+  <main>
+    <section class="shell hero" id="download">
+      <div class="hero-copy"><p class="eyebrow"><span class="status-dot"></span> 全部功能，免费使用</p><h1>连接设备，<br>专注手上的事。</h1><p class="lead">把终端、文件和设备调试放在同一个工作台。<br class="desktop-break">从远程服务器到手边的开发板，打开就能开始。</p>
+        <div class="actions"><a class="button primary" id="download-link" href="/api/download/XenoTerm-Setup-1.7.0.exe"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M5 16v5h14v-5"/></svg>免费下载 Windows 版</a><a class="source-link" href="https://github.com/luocraft/xenoterm">查看源代码 <span aria-hidden="true">↗</span></a></div>
+        <p class="download-meta" id="release-meta">v1.7.0 · Windows 10 / 11 · 64 位</p><p class="download-error" id="release-error" role="status" hidden></p>
+        <div class="benefits"><span>无需注册</span><span>无需激活</span><span>支持离线使用</span></div>
       </div>
-    </div>
-  </nav>
-
-  <section class="hero">
-    <div class="hero-badge">v1.5.3 · Windows</div>
-    <h1>Universal Embedded<br>Debug Station</h1>
-    <p>SSH terminal, network debugging, serial port, CAN bus analysis, and EtherCAT master — all in one elegant desktop app.</p>
-    <div class="hero-buttons">
-      <a href="/downloads/XenoTerm.Setup.1.5.3.exe" class="btn-primary">⬇ Download for Windows</a>
-      <a href="#features" class="btn-secondary">Learn More</a>
-    </div>
-    <p class="hero-meta">Windows 10+ · 64-bit · Free 15-day trial</p>
-  </section>
-
-  <section id="features" style="padding: 80px 24px; position: relative; z-index: 1;">
-    <div style="max-width: 1100px; margin: 0 auto;">
-      <h2 style="text-align:center; font-size:32px; font-weight:800; letter-spacing:-1px; margin-bottom:8px;">Everything You Need</h2>
-      <p style="text-align:center; font-size:14px; color:#94a3b8; margin-bottom:48px;">One tool for all embedded development debugging scenarios</p>
-      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:16px;">
-        <div class="feature-card">
-          <div style="width:40px;height:40px;border-radius:10px;background:rgba(59,130,246,0.12);display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:16px;">🖥</div>
-          <h3 style="font-size:15px;font-weight:700;margin-bottom:6px;">SSH Terminal</h3>
-          <p style="font-size:12px;color:#94a3b8;line-height:1.7;">Multi-tab, split-pane terminal with SFTP file manager. Jump host support, command history, session recording.</p>
-        </div>
-        <div class="feature-card">
-          <div style="width:40px;height:40px;border-radius:10px;background:rgba(139,92,246,0.12);display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:16px;">🔌</div>
-          <h3 style="font-size:15px;font-weight:700;margin-bottom:6px;">Network Debug</h3>
-          <p style="font-size:12px;color:#94a3b8;line-height:1.7;">TCP/UDP client and server. Hex/ASCII mode, auto-send timer, multi-client management.</p>
-        </div>
-        <div class="feature-card">
-          <div style="width:40px;height:40px;border-radius:10px;background:rgba(245,158,11,0.12);display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:16px;">⚡</div>
-          <h3 style="font-size:15px;font-weight:700;margin-bottom:6px;">Serial Port</h3>
-          <p style="font-size:12px;color:#94a3b8;line-height:1.7;">Full serial port debugging with DTR/RTS control, baud rate configuration, hex and text display.</p>
-        </div>
-        <div class="feature-card">
-          <div style="width:40px;height:40px;border-radius:10px;background:rgba(239,68,68,0.12);display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:16px;">🚗</div>
-          <h3 style="font-size:15px;font-weight:700;margin-bottom:6px;">CAN Bus</h3>
-          <p style="font-size:12px;color:#94a3b8;line-height:1.7;">DBC file parsing, real-time signal chart, message statistics, send list, ASC log replay. Supports ZLG and GC adapters.</p>
-        </div>
-        <div class="feature-card">
-          <div style="width:40px;height:40px;border-radius:10px;background:rgba(34,197,94,0.12);display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:16px;">⚙️</div>
-          <h3 style="font-size:15px;font-weight:700;margin-bottom:6px;">EtherCAT Master</h3>
-          <p style="font-size:12px;color:#94a3b8;line-height:1.7;">SDO read/write, PDO monitoring, object dictionary browser, ESI import, FoE firmware upload, SII access, emergency messages.</p>
-        </div>
-        <div class="feature-card">
-          <div style="width:40px;height:40px;border-radius:10px;background:rgba(99,102,241,0.12);display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:16px;">🎨</div>
-          <h3 style="font-size:15px;font-weight:700;margin-bottom:6px;">Modern UI</h3>
-          <p style="font-size:12px;color:#94a3b8;line-height:1.7;">Dark/light theme, drag-and-drop tab splitting, resizable panels. Clean and intuitive interface.</p>
-        </div>
+      <div class="workspace" aria-label="SSH 工作台示例">
+        <div class="workspace-bar"><span class="tiny-brand">&gt;_</span><span>XenoTerm</span><span class="example-label">工作台示例</span></div>
+        <div class="workspace-body"><aside class="workspace-side"><p>连接</p><div class="demo-host selected">&gt;_ <span>开发服务器<small>dev-server</small></span></div><div class="demo-host">&gt;_ <span>开发板<small>board.local</small></span></div><div class="demo-metrics"><p>远程资源</p><div>CPU <span>12%</span></div><progress value="12" max="100" aria-label="示例 CPU 使用率 12%"></progress><div>内存 <span>2.1 / 8 GB</span></div><progress value="26" max="100" aria-label="示例内存使用率 26%"></progress><div>磁盘 <span>18 / 80 GB</span></div><progress value="23" max="100" aria-label="示例磁盘使用率 23%"></progress></div></aside>
+        <div class="demo-terminal"><div class="terminal-tab"><span class="status-dot"></span> dev-server</div><div class="terminal-code"><p><span>dev@server</span> ~</p><p>$ uname -s</p><p class="terminal-output">Linux</p><p>$ ls</p><p class="terminal-output">projects/ &nbsp; logs/ &nbsp; workspace/</p><p>$ <span class="cursor"></span></p></div><div class="terminal-footer">SSH <span>UTF-8 &nbsp; / &nbsp; bash</span></div></div></div>
       </div>
-    </div>
-  </section>
-
-  <section id="pricing" style="padding: 80px 24px; position: relative; z-index: 1;">
-    <div style="max-width: 500px; margin: 0 auto; text-align: center;">
-      <h2 style="font-size:32px; font-weight:800; letter-spacing:-1px; margin-bottom:8px;">Simple Pricing</h2>
-      <p style="font-size:14px; color:#94a3b8; margin-bottom:36px;">Try free for 15 days, then subscribe annually</p>
-      <div style="padding:36px; border-radius:16px; background:rgba(255,255,255,0.03); border:1px solid rgba(99,102,241,0.3);">
-        <p style="font-size:11px; color:#818cf8; font-weight:600; letter-spacing:1px; margin-bottom:8px;">ANNUAL SUBSCRIPTION</p>
-        <p style="font-size:48px; font-weight:800; margin-bottom:4px;">¥49<span style="font-size:16px; color:#94a3b8; font-weight:400;">/year</span></p>
-        <p style="font-size:12px; color:#64748b; margin-bottom:24px;">Annual subscription · One machine</p>
-        <div style="text-align:left; max-width:260px; margin:0 auto 28px;">
-          <p style="font-size:12px; color:#94a3b8; padding:6px 0;">✅ All features included</p>
-          <p style="font-size:12px; color:#94a3b8; padding:6px 0;">✅ Updates during subscription</p>
-          <p style="font-size:12px; color:#94a3b8; padding:6px 0;">✅ 15-day free trial</p>
-          <p style="font-size:12px; color:#94a3b8; padding:6px 0;">✅ Alipay & WeChat Pay</p>
-        </div>
-        <a href="/downloads/XenoTerm.Setup.1.5.3.exe" class="btn-primary" style="width:100%;justify-content:center;">Download & Try Free</a>
-      </div>
-    </div>
-  </section>
-
-  <section id="download" style="padding: 60px 24px 80px; position: relative; z-index: 1;">
-    <div style="max-width: 600px; margin: 0 auto; text-align: center;">
-      <h2 style="font-size:28px; font-weight:800; letter-spacing:-0.5px; margin-bottom:24px;">Download</h2>
-      <div style="padding:24px; border-radius:14px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06);">
-        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
-          <div style="text-align:left;">
-            <p style="font-size:14px; font-weight:600;">XenoTerm v1.5.3</p>
-            <p style="font-size:11px; color:#64748b;">Windows 10+ · 64-bit · ~80MB</p>
-          </div>
-          <a href="/downloads/XenoTerm.Setup.1.5.3.exe" class="btn-primary" style="font-size:13px; padding:10px 20px;">⬇ Download .exe</a>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <footer style="padding:24px; text-align:center; border-top:1px solid rgba(255,255,255,0.06); position:relative; z-index:1;">
-    <p style="font-size:11px; color:#475569;">© 2025 XenoTerm. All rights reserved.</p>
-  </footer>
-</body>
-</html>
+    </section>
+    <section class="shell features" id="features"><div class="section-heading"><p class="eyebrow">一个工作台，四种连接</p><h2>常用的工具，都在这里。</h2></div><div class="feature-grid">
+      <article><span class="feature-mark" aria-hidden="true">&gt;_</span><h3>SSH 与 SFTP</h3><p>多会话、分屏终端和文件传输。连接后，在侧边栏查看远程资源占用。</p></article>
+      <article><span class="feature-mark" aria-hidden="true">↔</span><h3>TCP / UDP</h3><p>在同一窗口收发网络数据，支持文本与 HEX 显示，方便核对每一帧。</p></article>
+      <article><span class="feature-mark" aria-hidden="true">⌁</span><h3>串口调试</h3><p>配置端口与波特率，控制 DTR / RTS，完成开发板和外设的日常调试。</p></article>
+      <article><span class="feature-mark" aria-hidden="true">⊞</span><h3>CAN / CAN FD</h3><p>收发报文、解析 DBC 与查看信号曲线，让总线数据更容易理解。</p></article>
+    </div></section>
+    <section class="shell release-section"><div><p class="eyebrow">从 v1.7.0 开始</p><h2>打开即用，<br>不再需要许可证。</h2></div><div class="release-copy"><p>XenoTerm 现已免费开放全部功能。取消试用期限、付费订阅和设备激活，安装后即可使用。</p><p>已经安装旧版？直接安装新版即可，原有连接配置会继续保留。新版也保留了自动更新功能。</p><a class="source-link" href="/help.html">阅读使用指南 <span aria-hidden="true">→</span></a><details><summary>如何校验安装包？</summary><p>下载后，可用 PowerShell 的 Get-FileHash 命令计算 SHA256，并与下方数值核对。</p><code id="release-sha">正在获取校验值…</code></details></div></section>
+  </main>
+  <footer class="shell footer"><span class="brand footer-brand"><img src="/icon.svg" alt="" width="24" height="24">XenoTerm</span><span>终端与设备调试工作台</span><a href="https://github.com/luocraft/xenoterm">GitHub ↗</a></footer>
+  <script src="/site.js" defer></script>
+</body></html>

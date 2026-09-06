@@ -1,9 +1,10 @@
 import type { HostEntry, ConnectionGroup, AppConfig } from '../../../shared/types';
 import type { IConfigStore } from '../config-store.interface';
+import { DEFAULT_TERMINAL_CONFIG, normalizeTerminalConfig } from '../../../shared/terminal-defaults';
 
 const DEFAULT_CONFIG: AppConfig = {
   theme: 'dark',
-  terminal: { fontFamily: 'monospace', fontSize: 14, colorScheme: 'default' },
+  terminal: DEFAULT_TERMINAL_CONFIG,
   sidebarCollapsed: false,
   defaultKeepAlive: 60
 };
@@ -29,7 +30,14 @@ export class InMemoryConfigStore implements IConfigStore {
     return { ...this.appConfig };
   }
   setAppConfig(config: Partial<AppConfig>): void {
-    this.appConfig = { ...this.appConfig, ...config };
+    this.appConfig = {
+      ...this.appConfig,
+      ...config,
+      terminal: normalizeTerminalConfig({
+        ...this.appConfig.terminal,
+        ...config.terminal
+      })
+    };
   }
 
   reset(): void {

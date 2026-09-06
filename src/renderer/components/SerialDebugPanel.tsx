@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+﻿import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useSerialStore, hexDecode } from '../store/serial-store';
 import type { ModbusLogEntry } from '../store/serial-store';
 import { useT } from '../i18n';

@@ -25,16 +25,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Rebuild native modules for Electron
-        run: npx electron-rebuild -f -w ssh2,serialport
-
       - name: Build app
-        run: npx electron-vite build
+        run: npm run build
 
       - name: Package
-        run: npx electron-builder --win --publish never
+        run: npx electron-builder --win --publish never --config.asar=true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate download metadata
+        run: node scripts/release-metadata.js
 
       - name: Upload Release Assets
         uses: softprops/action-gh-release@v2
@@ -42,5 +42,7 @@ jobs:
           files: |
             release/*.exe
             release/*.blockmap
+            release/latest.yml
+            release/release.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

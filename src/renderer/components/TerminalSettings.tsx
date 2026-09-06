@@ -1,17 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useT } from '../i18n';
+import { useAppStore } from '../store/app-store';
+import { DEFAULT_TERMINAL_CONFIG, TERMINAL_FONT_OPTIONS } from '../../shared/terminal-defaults';
 
 interface TerminalSettingsProps {
   onClose: () => void;
 }
-
-const FONT_OPTIONS = [
-  "'JetBrains Mono', monospace",
-  "'Cascadia Code', monospace",
-  "'Fira Code', monospace",
-  "'Source Code Pro', monospace",
-  "monospace"
-];
 
 const FONT_SIZE_OPTIONS = [10, 11, 12, 13, 14, 15, 16, 18, 20];
 
@@ -24,15 +18,21 @@ const COLOR_SCHEMES = [
 
 export default function TerminalSettings({ onClose }: TerminalSettingsProps) {
   const t = useT();
-  const [fontFamily, setFontFamily] = useState(FONT_OPTIONS[0]);
-  const [fontSize, setFontSize] = useState(14);
-  const [colorScheme, setColorScheme] = useState('default');
+  const terminalConfig = useAppStore((s) => s.terminalConfig);
+  const setTerminalConfig = useAppStore((s) => s.setTerminalConfig);
+  const [fontFamily, setFontFamily] = useState(DEFAULT_TERMINAL_CONFIG.fontFamily);
+  const [fontSize, setFontSize] = useState(DEFAULT_TERMINAL_CONFIG.fontSize);
+  const [colorScheme, setColorScheme] = useState(DEFAULT_TERMINAL_CONFIG.colorScheme);
+
+  useEffect(() => {
+    setFontFamily(terminalConfig.fontFamily || DEFAULT_TERMINAL_CONFIG.fontFamily);
+    setFontSize(terminalConfig.fontSize || DEFAULT_TERMINAL_CONFIG.fontSize);
+    setColorScheme(terminalConfig.colorScheme || DEFAULT_TERMINAL_CONFIG.colorScheme);
+  }, [terminalConfig]);
 
   const handleSave = async () => {
     try {
-      await window.api.config.setAppConfig({
-        terminal: { fontFamily, fontSize, colorScheme }
-      });
+      await setTerminalConfig({ fontFamily, fontSize, colorScheme });
       onClose();
     } catch (err) {
       console.error('Failed to save terminal settings:', err);
@@ -65,8 +65,8 @@ export default function TerminalSettings({ onClose }: TerminalSettingsProps) {
           <div>
             <label className="block text-[10px] mb-1 uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>{t('termSettings.font')}</label>
             <select className={inputClass} style={inputStyle} value={fontFamily} onChange={(e) => setFontFamily(e.target.value)}>
-              {FONT_OPTIONS.map((f) => (
-                <option key={f} value={f}>{f.split("'")[1] || f}</option>
+              {TERMINAL_FONT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </select>
           </div>
@@ -105,12 +105,12 @@ export default function TerminalSettings({ onClose }: TerminalSettingsProps) {
           {/* Preview */}
           <div
             className="rounded-lg p-3 text-xs"
-            style={{ fontFamily, fontSize: `${fontSize}px`, background: '#0d0e1c', border: '1px solid var(--color-border)' }}
+            style={{ fontFamily, fontSize: `${fontSize}px`, background: 'var(--color-terminal)', border: '1px solid var(--color-border)' }}
           >
-            <span style={{ color: '#4ade80' }}>user@server</span>
-            <span style={{ color: '#e4e4e7' }}>:</span>
-            <span style={{ color: '#60a5fa' }}>~</span>
-            <span style={{ color: '#e4e4e7' }}>$ ls -la</span>
+            <span style={{ color: 'var(--color-accent-text)' }}>user@server</span>
+            <span style={{ color: 'var(--color-text-primary)' }}>:</span>
+            <span style={{ color: 'var(--color-text-secondary)' }}>~</span>
+            <span style={{ color: 'var(--color-text-primary)' }}>$ ls -la</span>
           </div>
 
           {/* Actions */}

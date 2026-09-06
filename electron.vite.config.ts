@@ -3,7 +3,7 @@ import { resolve } from 'path';
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin({ exclude: ['fast-xml-parser'] })],
+    plugins: [externalizeDepsPlugin({ exclude: ['fast-xml-parser', 'ssh2'] })],
     build: {
       outDir: 'dist/main',
       rollupOptions: {

@@ -5,22 +5,22 @@ import { existsSync, statSync } from 'fs';
 import { ConfigStore } from '../services/config-store';
 import { ConnectionManager } from '../services/connection-manager';
 import { SSHService } from '../services/ssh-service';
+import { ResourceMonitor } from '../services/resource-monitor';
 import { SFTPService } from '../services/sftp-service';
 import { createTransferProgress } from '../services/sftp-utils';
-import * as licenseService from '../services/license-service';
 import { SerialService } from '../services/serial-service';
 import { NetDebugService } from '../services/net-debug-service';
 import { CanService } from '../services/can/can-service';
-import { EthercatService } from '../services/ethercat/ethercat-service';
+import { updateService } from '../services/update-service';
 
 const configStore = new ConfigStore();
 const connectionManager = new ConnectionManager(configStore);
 const sshService = new SSHService();
+const resourceMonitor = new ResourceMonitor();
 const sftpService = new SFTPService();
 const serialService = new SerialService();
 const netDebugService = new NetDebugService();
 const canService = new CanService();
-const ethercatService = new EthercatService();
 
 // Wire up host resolver for jump host support
 sshService.setHostResolver((id) => connectionManager.getHost(id));
@@ -34,6 +34,11 @@ function getMainWindow(): BrowserWindow | null {
 }
 
 export function registerIpcHandlers(): void {
+  updateService.onStatusChange((status) => {
+    const win = getMainWindow();
+    win?.webContents.send('update:status', status);
+  });
+
   // === Config handlers ===
   ipcMain.handle('config:getHosts', async () => {
     try {
@@ -91,6 +96,9 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('config:setAppConfig', async (_event, config: Partial<AppConfig>) => {
     try {
       configStore.setAppConfig(config);
+      if (typeof config.autoCheckUpdates === 'boolean') {
+        updateService.setAutoCheckOnStartup(config.autoCheckUpdates);
+      }
     } catch (err) {
       throw new Error(`Failed to set app config: ${(err as Error).message}`);
     }
@@ -160,6 +168,12 @@ export function registerIpcHandlers(): void {
       console.error('[SSH] Connection failed:', (err as Error).message);
       throw new Error(`SSH connection failed: ${(err as Error).message}`);
     }
+  });
+
+  ipcMain.handle('ssh:resources', async (_event, sessionId: string) => {
+    const client = sshService.getSFTPClient(sessionId);
+    if (!client) throw new Error('Session not connected');
+    return resourceMonitor.read(client);
   });
 
   ipcMain.handle('ssh:disconnect', async (_event, sessionId: string) => {
@@ -465,6 +479,23 @@ export function registerIpcHandlers(): void {
     return result.canceled ? null : result.filePath || null;
   });
 
+  // === Update handlers ===
+  ipcMain.handle('update:getStatus', async () => {
+    return updateService.getStatus();
+  });
+
+  ipcMain.handle('update:check', async () => {
+    return updateService.checkForUpdates(true);
+  });
+
+  ipcMain.handle('update:setAutoCheckOnStartup', async (_event, enabled: boolean) => {
+    return updateService.setAutoCheckOnStartup(enabled);
+  });
+
+  ipcMain.handle('update:quitAndInstall', async () => {
+    updateService.quitAndInstall();
+  });
+
   // Forward global SFTP progress to renderer
   sftpService.onGlobalProgress((progress) => {
     const win = getMainWindow();
@@ -603,7 +634,7 @@ export function registerIpcHandlers(): void {
   });
 
   // === CAN Debug handlers ===
-  ipcMain.handle('can:open', async (_event, driverName: string, deviceType: number, deviceIndex: number, channel: number, baudRate: number, fdConfig?: any) => {
+  ipcMain.handle('can:open', async (_event, driverName: string, deviceType: number, deviceIndex: number, channel: number, baudRate: number, fdConfig?: any, chBaudRates?: Record<number, number>) => {
     const fdOpts = fdConfig ? {
       deviceType, deviceIndex, channel,
       protocol: fdConfig.protocol ?? 1,
@@ -613,15 +644,20 @@ export function registerIpcHandlers(): void {
       ch1BaudRate: fdConfig.ch1BaudRate,
       ch1DataBaudRate: fdConfig.ch1DataBaudRate,
     } : undefined;
-    const result = canService.open(driverName, { deviceType, deviceIndex, channel, baudRate, ch1BaudRate: fdConfig?.ch1BaudRate }, fdOpts);
-    const win = getMainWindow();
+    const result = canService.open(driverName, { deviceType, deviceIndex, channel, baudRate, ch1BaudRate: fdConfig?.ch1BaudRate, chBaudRates }, fdOpts);
     const sessions = Array.isArray(result) ? result : [result];
     for (const session of sessions) {
       canService.onData(session.id, (frames) => {
+        const win = getMainWindow();
         win?.webContents.send('can:data', session.id, frames);
       });
       canService.onError(session.id, (error) => {
+        const win = getMainWindow();
         win?.webContents.send('can:error', session.id, error);
+      });
+      canService.onBusError(session.id, (info) => {
+        const win = getMainWindow();
+        win?.webContents.send('can:busError', session.id, info);
       });
     }
     return result;
@@ -632,7 +668,7 @@ export function registerIpcHandlers(): void {
   });
 
   ipcMain.handle('can:send', async (_event, sessionId: string, frame: any) => {
-    canService.send(sessionId, [frame]);
+    return canService.send(sessionId, [frame]);
   });
 
   ipcMain.handle('can:parseDbc', async (_event, content: string) => {
@@ -684,138 +720,6 @@ export function registerIpcHandlers(): void {
   ipcMain.on('net:send', (_event, sessionId: string, hexData: string, remoteAddress?: string) => {
     const buf = Buffer.from(hexData, 'hex');
     netDebugService.send(sessionId, buf, remoteAddress);
-  });
-
-  // === EtherCAT handlers ===
-  ipcMain.handle('ecat:isAvailable', async () => {
-    return ethercatService.isAvailable();
-  });
-
-  ipcMain.handle('ecat:listAdapters', async () => {
-    return ethercatService.listAdapters();
-  });
-
-  ipcMain.handle('ecat:connect', async (_event, adapterName: string) => {
-    const session = ethercatService.connect(adapterName);
-    const win = getMainWindow();
-    ethercatService.onPdoData((slaveIndex, input, output) => {
-      win?.webContents.send('ecat:pdoData', slaveIndex, input, output);
-    });
-    ethercatService.onWkcError((expected, actual) => {
-      win?.webContents.send('ecat:wkcError', expected, actual);
-    });
-    ethercatService.onStateChange((s) => {
-      win?.webContents.send('ecat:stateChange', s);
-    });
-    ethercatService.onEmergency((msg) => {
-      win?.webContents.send('ecat:emergency', msg);
-    });
-    return session;
-  });
-
-  ipcMain.handle('ecat:disconnect', async () => {
-    ethercatService.disconnect();
-  });
-
-  ipcMain.handle('ecat:getSlaves', async () => {
-    return ethercatService.getSlaves();
-  });
-
-  ipcMain.handle('ecat:requestState', async (_event, slaveIndex: number, targetState: number) => {
-    return ethercatService.requestState(slaveIndex, targetState);
-  });
-
-  ipcMain.handle('ecat:sdoRead', async (_event, slaveIndex: number, index: number, subIndex: number, size: number) => {
-    return ethercatService.sdoRead(slaveIndex, index, subIndex, size);
-  });
-
-  ipcMain.handle('ecat:sdoWrite', async (_event, slaveIndex: number, index: number, subIndex: number, dataHex: string, dataType: string) => {
-    return ethercatService.sdoWrite(slaveIndex, index, subIndex, dataHex, dataType);
-  });
-
-  ipcMain.handle('ecat:startPdo', async (_event, intervalMs?: number) => {
-    ethercatService.startPdoMonitor(intervalMs ?? 1);
-  });
-
-  ipcMain.handle('ecat:stopPdo', async () => {
-    ethercatService.stopPdoMonitor();
-  });
-
-  ipcMain.handle('ecat:importEsi', async (_event, xmlContent: string) => {
-    return ethercatService.importEsi(xmlContent);
-  });
-
-  ipcMain.handle('ecat:scanOd', async (_event, slaveIndex: number) => {
-    return ethercatService.scanObjectDictionary(slaveIndex);
-  });
-
-  ipcMain.handle('ecat:getErrorCounters', async (_event, slaveIndex: number) => {
-    return ethercatService.getErrorCounters(slaveIndex);
-  });
-
-  ipcMain.handle('ecat:clearErrorCounters', async (_event, slaveIndex: number) => {
-    ethercatService.clearErrorCounters(slaveIndex);
-  });
-
-  ipcMain.handle('ecat:resolvePdoSignals', async (_event, slaveIndex: number) => {
-    return ethercatService.resolvePdoSignals(slaveIndex);
-  });
-
-  ipcMain.handle('ecat:writeOutputPdo', async (_event, slaveIndex: number, offset: number, data: number[]) => {
-    ethercatService.writeOutputPdo(slaveIndex, offset, data);
-  });
-
-  ipcMain.handle('ecat:foeUpload', async (_event, slaveIndex: number, filename: string, dataArr: number[], password: number) => {
-    const data = Buffer.from(dataArr);
-    const win = getMainWindow();
-    return ethercatService.foeUpload(slaveIndex, filename, data, password, (percent) => {
-      win?.webContents.send('ecat:foeProgress', percent);
-    });
-  });
-
-  ipcMain.handle('ecat:siiRead', async (_event, slaveIndex: number, offset: number, size: number) => {
-    return ethercatService.siiRead(slaveIndex, offset, size);
-  });
-
-  ipcMain.handle('ecat:siiWrite', async (_event, slaveIndex: number, offset: number, data: number[]) => {
-    return ethercatService.siiWrite(slaveIndex, offset, data);
-  });
-
-  // === License handlers ===
-  ipcMain.handle('license:getStatus', async () => {
-    const status = licenseService.getLicenseStatus();
-    // Auto-recover: if not licensed and not in trial, try to recover from server
-    if (!status.licensed && !status.trial) {
-      const recovered = await licenseService.recoverLicense();
-      if (recovered.success) {
-        return licenseService.getLicenseStatus();
-      }
-    }
-    return status;
-  });
-
-  ipcMain.handle('license:getMachineId', async () => {
-    return licenseService.getMachineId();
-  });
-
-  ipcMain.handle('license:activate', async (_event, licenseKey: string) => {
-    return licenseService.activateLicense(licenseKey);
-  });
-
-  ipcMain.handle('license:verify', async () => {
-    return licenseService.verifyLicenseOnline();
-  });
-
-  ipcMain.handle('license:createPayment', async (_event, payType: 'wxpay' | 'alipay') => {
-    return licenseService.createPayment(payType);
-  });
-
-  ipcMain.handle('license:queryPayment', async (_event, orderId: string) => {
-    return licenseService.queryPayment(orderId);
-  });
-
-  ipcMain.handle('license:renew', async () => {
-    return licenseService.renewLicense();
   });
 
 }

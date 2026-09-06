@@ -1,10 +1,11 @@
 {
-  "name": "xenoterm-license-server",
-  "version": "1.0.0",
+  "name": "xenoterm-server",
+  "version": "1.7.0",
   "private": true,
   "scripts": {
     "start": "node index.js",
-    "dev": "node --watch index.js"
+    "dev": "node --watch index.js",
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
     "express": "^4.21.0",

@@ -7,6 +7,12 @@ dist/
 # Electron-builder output
 release/
 
+# Local UI review artifacts
+output/playwright/
+src/renderer/output/
+xenoterm-website/downloads/
+.playwright-cli/
+
 # Temp files
 pkg_hex.txt
 

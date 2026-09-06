@@ -1,10 +1,13 @@
 import { create } from 'zustand';
 import type {
+  AppConfig,
   HostEntry,
   ConnectionGroup,
   SSHSession,
-  TransferProgress
+  TransferProgress,
+  UpdateStatusSnapshot
 } from '../../shared/types';
+import { DEFAULT_TERMINAL_CONFIG, normalizeTerminalConfig } from '../../shared/terminal-defaults';
 
 export interface AppStore {
   // Connection management
@@ -21,11 +24,13 @@ export interface AppStore {
 
   // UI state
   theme: 'dark' | 'light';
+  terminalConfig: AppConfig['terminal'];
   sidebarCollapsed: boolean;
   splitPaneVisible: boolean;
   splitPaneRatio: number;
   commandHistoryVisible: boolean;
   timestampGutterVisible: boolean;
+  updateStatus: UpdateStatusSnapshot | null;
 
   // Command history: global list of commands (persisted, max 100)
   commandHistory: { cmd: string; ts: number; hostName?: string }[];
@@ -61,10 +66,19 @@ export interface AppStore {
   toggleTimestampGutter: () => void;
   setSplitPaneRatio: (ratio: number) => void;
   loadAppConfig: () => Promise<void>;
+  setTerminalConfig: (terminalConfig: AppConfig['terminal']) => Promise<void>;
+  loadUpdateStatus: () => Promise<void>;
+  setUpdateStatus: (status: UpdateStatusSnapshot) => void;
+  checkForUpdates: () => Promise<UpdateStatusSnapshot>;
+  setAutoCheckUpdates: (enabled: boolean) => Promise<void>;
+  quitAndInstallUpdate: () => Promise<void>;
   addCommand: (sessionId: string, cmd: string) => void;
   loadCommandHistory: () => Promise<void>;
   setSessionCwd: (sessionId: string, cwd: string) => void;
 }
+
+// Subscriptions outlive a mounted terminal view, but must not outlive its session.
+const sessionSubscriptions = new Map<string, () => void>();
 
 export const useAppStore = create<AppStore>((set, get) => ({
   // Initial state
@@ -74,12 +88,14 @@ export const useAppStore = create<AppStore>((set, get) => ({
   sessions: [],
   activeSessionId: null,
   transfers: [],
-  theme: 'dark',
+  theme: 'light',
+  terminalConfig: DEFAULT_TERMINAL_CONFIG,
   sidebarCollapsed: false,
   splitPaneVisible: false,
   splitPaneRatio: 0.5,
   commandHistoryVisible: false,
   timestampGutterVisible: false,
+  updateStatus: null,
   commandHistory: [],
   sessionCwdMap: {},
 
@@ -153,12 +169,16 @@ export const useAppStore = create<AppStore>((set, get) => ({
       }));
 
       // Listen for session close
-      window.api.ssh.onClose(session.id, () => {
+      const unsubscribeClose = window.api.ssh.onClose(session.id, () => {
         get().updateSessionStatus(session.id, 'disconnected');
       });
 
-      window.api.ssh.onError(session.id, (error) => {
+      const unsubscribeError = window.api.ssh.onError(session.id, (error) => {
         get().updateSessionStatus(session.id, 'error', error);
+      });
+      sessionSubscriptions.set(session.id, () => {
+        unsubscribeClose();
+        unsubscribeError();
       });
     } catch (err) {
       console.error('Failed to connect:', err);
@@ -212,17 +232,23 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   setActiveSession: (sessionId) => set({ activeSessionId: sessionId }),
 
-  removeSession: (sessionId) =>
+  removeSession: (sessionId) => {
+    sessionSubscriptions.get(sessionId)?.();
+    sessionSubscriptions.delete(sessionId);
     set((state) => {
       const sessions = state.sessions.filter((s) => s.id !== sessionId);
+      const sessionCwdMap = { ...state.sessionCwdMap };
+      delete sessionCwdMap[sessionId];
       return {
         sessions,
+        sessionCwdMap,
         activeSessionId:
           state.activeSessionId === sessionId
             ? sessions[sessions.length - 1]?.id || null
             : state.activeSessionId
       };
-    }),
+    });
+  },
 
   updateSessionStatus: (sessionId, status, error) =>
     set((state) => ({
@@ -277,9 +303,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
     window.api.config.setAppConfig({ theme: newTheme });
     document.documentElement.classList.toggle('light', newTheme === 'light');
     if (newTheme === 'light') {
-      window.api.theme.updateTitlebar('#c9cfcb', '#4a524d');
+      window.api.theme.updateTitlebar('#F9F9F7', '#62615c');
     } else {
-      window.api.theme.updateTitlebar('#141525', '#9ca3af');
+      window.api.theme.updateTitlebar('#242423', '#bdbbb5');
     }
   },
 
@@ -328,17 +354,55 @@ export const useAppStore = create<AppStore>((set, get) => ({
       const config = await window.api.config.getAppConfig();
       set({
         theme: config.theme,
+        terminalConfig: normalizeTerminalConfig(config.terminal),
         sidebarCollapsed: config.sidebarCollapsed
       });
       document.documentElement.classList.toggle('light', config.theme === 'light');
       if (config.theme === 'light') {
-        window.api.theme.updateTitlebar('#c9cfcb', '#4a524d');
+        window.api.theme.updateTitlebar('#F9F9F7', '#62615c');
       } else {
-        window.api.theme.updateTitlebar('#141525', '#9ca3af');
+        window.api.theme.updateTitlebar('#242423', '#bdbbb5');
       }
     } catch (err) {
       console.error('Failed to load app config:', err);
     }
+  },
+
+  setTerminalConfig: async (terminalConfig) => {
+    const merged = normalizeTerminalConfig(terminalConfig);
+    set({ terminalConfig: merged });
+    try {
+      await window.api.config.setAppConfig({ terminal: merged });
+    } catch (err) {
+      console.error('Failed to save terminal settings:', err);
+      throw err;
+    }
+  },
+
+  loadUpdateStatus: async () => {
+    try {
+      const updateStatus = await window.api.update.getStatus();
+      set({ updateStatus });
+    } catch (err) {
+      console.error('Failed to load update status:', err);
+    }
+  },
+
+  setUpdateStatus: (updateStatus) => set({ updateStatus }),
+
+  checkForUpdates: async () => {
+    const updateStatus = await window.api.update.check();
+    set({ updateStatus });
+    return updateStatus;
+  },
+
+  setAutoCheckUpdates: async (enabled) => {
+    const updateStatus = await window.api.update.setAutoCheckOnStartup(enabled);
+    set({ updateStatus });
+  },
+
+  quitAndInstallUpdate: async () => {
+    await window.api.update.quitAndInstall();
   },
 
   setSessionCwd: (sessionId, cwd) => {

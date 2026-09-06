@@ -2,13 +2,17 @@ import { contextBridge, ipcRenderer, clipboard } from 'electron';
 import type {
   HostEntry,
   SSHSession,
+  RemoteResources,
   FileEntry,
   TransferProgress,
   AppConfig,
   ImportResult,
+  UpdateStatusSnapshot,
 } from '../shared/types';
 const api = {
   ssh: {
+    getResources: (sessionId: string): Promise<RemoteResources> =>
+      ipcRenderer.invoke('ssh:resources', sessionId),
     connect: (config: HostEntry, password?: string): Promise<SSHSession> =>
       ipcRenderer.invoke('ssh:connect', config, password),
     disconnect: (sessionId: string): Promise<void> =>
@@ -212,8 +216,8 @@ const api = {
     }
   },
   can: {
-    open: (driverName: string, deviceType: number, deviceIndex: number, channel: number, baudRate: number, fdConfig?: any): Promise<any> =>
-      ipcRenderer.invoke('can:open', driverName, deviceType, deviceIndex, channel, baudRate, fdConfig),
+    open: (driverName: string, deviceType: number, deviceIndex: number, channel: number, baudRate: number, fdConfig?: any, chBaudRates?: Record<number, number>): Promise<any> =>
+      ipcRenderer.invoke('can:open', driverName, deviceType, deviceIndex, channel, baudRate, fdConfig, chBaudRates),
     close: (sessionId: string): Promise<void> =>
       ipcRenderer.invoke('can:close', sessionId),
     send: (sessionId: string, frame: any): Promise<void> =>
@@ -233,6 +237,13 @@ const api = {
       };
       ipcRenderer.on('can:error', handler);
       return () => ipcRenderer.removeListener('can:error', handler);
+    },
+    onBusError: (sessionId: string, callback: (info: { errCode: number; errTypes: string[]; timestamp: number }) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, sid: string, info: any) => {
+        if (sid === sessionId) callback(info);
+      };
+      ipcRenderer.on('can:busError', handler);
+      return () => ipcRenderer.removeListener('can:busError', handler);
     },
     udsRequest: (sessionId: string, txId: number, rxId: number, payload: number[]): Promise<any> =>
       ipcRenderer.invoke('can:udsRequest', sessionId, txId, rxId, payload),
@@ -325,21 +336,22 @@ const api = {
       return () => ipcRenderer.removeListener('ecat:foeProgress', handler);
     }
   },
-  license: {
-    getStatus: (): Promise<{ licensed: boolean; trial: boolean; daysLeft: number; expired: boolean; licenseKey?: string; licenseExpired?: boolean; licenseDaysLeft?: number; expiresAt?: string }> =>
-      ipcRenderer.invoke('license:getStatus'),
-    getMachineId: (): Promise<string> =>
-      ipcRenderer.invoke('license:getMachineId'),
-    activate: (licenseKey: string): Promise<{ success: boolean; error?: string }> =>
-      ipcRenderer.invoke('license:activate', licenseKey),
-    verify: (): Promise<boolean> =>
-      ipcRenderer.invoke('license:verify'),
-    createPayment: (payType: 'wxpay' | 'alipay'): Promise<{ success: boolean; orderId?: string; qrCodeUrl?: string; error?: string }> =>
-      ipcRenderer.invoke('license:createPayment', payType),
-    queryPayment: (orderId: string): Promise<{ success: boolean; status?: string; licenseKey?: string }> =>
-      ipcRenderer.invoke('license:queryPayment', orderId),
-    renewLicense: (): Promise<{ success: boolean; error?: string }> =>
-      ipcRenderer.invoke('license:renew'),
+  update: {
+    getStatus: (): Promise<UpdateStatusSnapshot> =>
+      ipcRenderer.invoke('update:getStatus'),
+    check: (): Promise<UpdateStatusSnapshot> =>
+      ipcRenderer.invoke('update:check'),
+    setAutoCheckOnStartup: (enabled: boolean): Promise<UpdateStatusSnapshot> =>
+      ipcRenderer.invoke('update:setAutoCheckOnStartup', enabled),
+    quitAndInstall: (): Promise<void> =>
+      ipcRenderer.invoke('update:quitAndInstall'),
+    onStatusChange: (callback: (status: UpdateStatusSnapshot) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, status: UpdateStatusSnapshot) => {
+        callback(status);
+      };
+      ipcRenderer.on('update:status', handler);
+      return () => ipcRenderer.removeListener('update:status', handler);
+    }
   }
 };
 

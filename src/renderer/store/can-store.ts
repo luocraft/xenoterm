@@ -11,6 +11,7 @@ export interface CanSession {
   baudRate: number;
   status: 'connected' | 'closed' | 'error';
   error?: string;
+  busError?: { errCode: number; errTypes: string[]; timestamp: number } | null;
 }
 
 export interface CanMessageRow {
@@ -98,13 +99,74 @@ const defaultCanUI = (): CanSessionUI => ({
 const MAX_MESSAGES = 5000;
 const timerHandles = new Map<string, ReturnType<typeof setInterval>>();
 const sendListTimers = new Map<string, ReturnType<typeof setInterval>>();
+const timerInFlight = new Set<string>();
+const sendListInFlight = new Set<string>();
 const activeRecordings = new Map<string, string>();
 const busLoadCounters = new Map<string, { count: number; lastReset: number }>();
+const pendingTxEchoes = new Map<string, { signature: string; expiresAt: number }[]>();
+const LOCAL_TX_ECHO_TTL_MS = 2000;
 
 function bumpBusLoad(sessionId: string, frameCount: number): void {
   const blc = busLoadCounters.get(sessionId) || { count: 0, lastReset: Date.now() };
   blc.count += frameCount;
   busLoadCounters.set(sessionId, blc);
+}
+
+function getFrameSignature(frame: CanFrame): string {
+  return [
+    frame.id,
+    frame.extended ? 1 : 0,
+    frame.remote ? 1 : 0,
+    frame.dlc,
+    frame.fd ? 1 : 0,
+    frame.brs ? 1 : 0,
+    frame.data.slice(0, frame.dlc).join(','),
+  ].join('|');
+}
+
+function prunePendingTxEchoes(sessionId: string, now = Date.now()): { signature: string; expiresAt: number }[] {
+  const queue = (pendingTxEchoes.get(sessionId) || []).filter((item) => item.expiresAt > now);
+  if (queue.length > 0) {
+    pendingTxEchoes.set(sessionId, queue);
+  } else {
+    pendingTxEchoes.delete(sessionId);
+  }
+  return queue;
+}
+
+function rememberLocalTx(sessionId: string, frame: CanFrame): void {
+  const queue = prunePendingTxEchoes(sessionId);
+  queue.push({ signature: getFrameSignature(frame), expiresAt: Date.now() + LOCAL_TX_ECHO_TTL_MS });
+  pendingTxEchoes.set(sessionId, queue.slice(-256));
+}
+
+function forgetLocalTx(sessionId: string, frame: CanFrame): void {
+  const queue = prunePendingTxEchoes(sessionId);
+  const signature = getFrameSignature(frame);
+  const index = queue.findIndex((item) => item.signature === signature);
+  if (index >= 0) {
+    queue.splice(index, 1);
+  }
+  if (queue.length > 0) {
+    pendingTxEchoes.set(sessionId, queue);
+  } else {
+    pendingTxEchoes.delete(sessionId);
+  }
+}
+
+function isPendingLocalTxEcho(sessionId: string, frame: CanFrame): boolean {
+  if (frame.direction !== 'tx') return false;
+  const queue = prunePendingTxEchoes(sessionId);
+  const signature = getFrameSignature(frame);
+  const index = queue.findIndex((item) => item.signature === signature);
+  if (index < 0) return false;
+  queue.splice(index, 1);
+  if (queue.length > 0) {
+    pendingTxEchoes.set(sessionId, queue);
+  } else {
+    pendingTxEchoes.delete(sessionId);
+  }
+  return true;
 }
 
 function updateBusLoadState(sessionId: string, set: Function, get: Function): void {
@@ -125,13 +187,57 @@ function updateBusLoadState(sessionId: string, set: Function, get: Function): vo
   set({ busLoad: bl });
 }
 
+function setSessionError(sessionId: string, error: unknown, set: Function): void {
+  const message = error instanceof Error ? error.message : String(error);
+  set((state: CanDebugStore) => ({
+    sessions: state.sessions.map((s) =>
+      s.id === sessionId ? { ...s, status: 'error' as const, error: message } : s
+    ),
+  }));
+}
+
+async function transmitCanFrame(
+  sessionId: string,
+  txFrame: CanFrame,
+  set: Function,
+  get: Function,
+): Promise<boolean> {
+  rememberLocalTx(sessionId, txFrame);
+  try {
+    await window.api.can.send(sessionId, { ...txFrame, timestamp: 0 });
+  } catch (error) {
+    forgetLocalTx(sessionId, txFrame);
+    setSessionError(sessionId, error, set);
+    return false;
+  }
+
+  bumpBusLoad(sessionId, 1);
+  set((state: CanDebugStore) => {
+    const msgs = new Map(state.messages);
+    const seqs = new Map(state.seqCounters);
+    let seq = seqs.get(sessionId) || 0;
+    seq++;
+    const existing = msgs.get(sessionId) || [];
+    const db = state.dbc;
+    const msgDef = db ? db.messages.find((m) => m.id === txFrame.id && m.extended === txFrame.extended) : undefined;
+    const row: CanMessageRow = { seq, frame: txFrame, messageName: msgDef?.name };
+    writeCanRecording(sessionId, txFrame, seq);
+    const combined = [...existing, row];
+    msgs.set(sessionId, combined.length > MAX_MESSAGES ? combined.slice(-MAX_MESSAGES) : combined);
+    seqs.set(sessionId, seq);
+    return { messages: msgs, seqCounters: seqs };
+  });
+  updateBusLoadState(sessionId, set, get);
+  return true;
+}
+
 const sessionStartTime = new Map<string, number>();
 
 export function getSessionStartTime(sessionId: string): number {
   return sessionStartTime.get(sessionId) || 0;
 }
 
-const SIGNAL_HISTORY_MAX = 1000;
+const SIGNAL_HISTORY_MAX = 6000;
 
 
 
@@ -146,7 +252,7 @@ export interface CanDebugStore {
   messageStats: Map<string, Map<number, MessageStats>>;
   busLoad: Map<string, number>;
 
-  openDevice: (driverName: string, deviceType: number, deviceIndex: number, channel: number, baudRate: number, fdConfig?: { protocol?: number; mode?: number; dataBaudRate?: number; nonIso?: boolean; ch1BaudRate?: number; ch1DataBaudRate?: number }) => Promise<void>;
+  openDevice: (driverName: string, deviceType: number, deviceIndex: number, channel: number, baudRate: number, fdConfig?: { protocol?: number; mode?: number; dataBaudRate?: number; nonIso?: boolean; ch1BaudRate?: number; ch1DataBaudRate?: number }, chBaudRates?: Record<number, number>) => Promise<void>;
   closeDevice: (sessionId: string) => void;
   removeSession: (sessionId: string) => void;
   setActiveSession: (id: string | null) => void;
@@ -156,14 +262,14 @@ export interface CanDebugStore {
   unloadDbc: () => void;
   addMonitorSignal: (sessionId: string, messageId: number, extended: boolean, signal: DbcSignal) => void;
   removeMonitorSignal: (signalName: string, messageId: number, sessionId?: string) => void;
-  sendFrame: (sessionId: string) => void;
+  sendFrame: (sessionId: string) => Promise<void>;
   startTimer: (sessionId: string) => void;
   stopTimer: (sessionId: string) => void;
   addSendListItem: (sessionId: string) => void;
   removeSendListItem: (sessionId: string, itemId: string) => void;
   updateSendListItem: (sessionId: string, itemId: string, patch: Partial<SendListItem>) => void;
   toggleSendListItem: (sessionId: string, itemId: string) => void;
-  sendListItemOnce: (sessionId: string, itemId: string) => void;
+  sendListItemOnce: (sessionId: string, itemId: string) => Promise<void>;
   startRecording: (sessionId: string, filePath: string) => Promise<void>;
   stopRecording: (sessionId: string) => Promise<void>;
   replayAsc: (sessionId: string, content: string) => void;
@@ -186,6 +292,76 @@ function writeCanRecording(sessionId: string, frame: CanFrame, seq: number): voi
   }
 }
 
+/** Software fallback for single-frame periodic send (startTimer) */
+function fallbackStartTimer(sessionId: string, ms: number, set: Function, get: Function): void {
+  const existing = timerHandles.get(sessionId);
+  if (existing) clearInterval(existing);
+  timerHandles.delete(sessionId);
+  timerInFlight.delete(sessionId);
+  const store = get() as CanDebugStore;
+  void store.sendFrame(sessionId);
+  const handle = setInterval(async () => {
+    const st = get() as CanDebugStore;
+    const s = st.sessions.find((ss: CanSession) => ss.id === sessionId);
+    if (!s || s.status !== 'connected') {
+      clearInterval(timerHandles.get(sessionId)!);
+      timerHandles.delete(sessionId);
+      timerInFlight.delete(sessionId);
+      st.updateSessionUI(sessionId, { timerRunning: false });
+      return;
+    }
+    if (timerInFlight.has(sessionId)) return;
+    timerInFlight.add(sessionId);
+    try {
+      await st.sendFrame(sessionId);
+    } finally {
+      timerInFlight.delete(sessionId);
+    }
+  }, ms);
+  timerHandles.set(sessionId, handle);
+  store.updateSessionUI(sessionId, { timerRunning: true });
+}
+
+/** Software fallback for periodic send (setInterval) */
+function startSoftwareTimer(sessionId: string, itemId: string, key: string, set: Function, get: Function): void {
+  const intervalMs = (get() as CanDebugStore).sessionUI.get(sessionId)?.sendList.find((i: SendListItem) => i.id === itemId)?.intervalMs || 100;
+  const sendOne = async () => {
+    const st = get() as CanDebugStore;
+    const s = st.sessions.find((ss: CanSession) => ss.id === sessionId);
+    if (!s || s.status !== 'connected') {
+      clearInterval(sendListTimers.get(key)!);
+      sendListTimers.delete(key);
+      sendListInFlight.delete(key);
+      st.updateSendListItem(sessionId, itemId, { enabled: false });
+      return;
+    }
+    const it = st.sessionUI.get(sessionId)?.sendList.find((i: SendListItem) => i.id === itemId);
+    if (!it) return;
+    const id = parseInt(it.canId, 16);
+    if (isNaN(id)) return;
+    const dataBytes = it.data.replace(/\s/g, '').match(/.{1,2}/g)?.map((h: string) => parseInt(h, 16)) || [];
+    const maxLen = it.fd ? fdNearestLength(it.dlc) : Math.min(it.dlc, 8);
+    const txFrame: CanFrame = {
+      id, extended: it.extended, remote: false,
+      dlc: maxLen, data: [...dataBytes.slice(0, maxLen), ...new Array(Math.max(0, maxLen - dataBytes.length)).fill(0)],
+      timestamp: Date.now(), direction: 'tx', fd: it.fd || undefined, brs: it.brs || undefined,
+    };
+    await transmitCanFrame(sessionId, txFrame, set, get);
+  };
+  void sendOne();
+  const h = setInterval(async () => {
+    if (sendListInFlight.has(key)) return;
+    sendListInFlight.add(key);
+    try {
+      await sendOne();
+    } finally {
+      sendListInFlight.delete(key);
+    }
+  }, (get() as CanDebugStore).sessionUI.get(sessionId)?.sendList.find((i: SendListItem) => i.id === itemId)?.intervalMs || 100);
+  sendListTimers.set(key, h);
+  (get() as CanDebugStore).updateSendListItem(sessionId, itemId, { enabled: true });
+}
+
 export const useCanDebugStore = create<CanDebugStore>((set, get) => ({
   sessions: [],
   activeSessionId: null,
@@ -197,8 +373,8 @@ export const useCanDebugStore = create<CanDebugStore>((set, get) => ({
   messageStats: new Map(),
   busLoad: new Map(),
 
-  openDevice: async (driverName, deviceType, deviceIndex, channel, baudRate, fdConfig) => {
-    const result = await window.api.can.open(driverName, deviceType, deviceIndex, channel, baudRate, fdConfig);
+  openDevice: async (driverName, deviceType, deviceIndex, channel, baudRate, fdConfig, chBaudRates) => {
+    const result = await window.api.can.open(driverName, deviceType, deviceIndex, channel, baudRate, fdConfig, chBaudRates);
     const sessions = Array.isArray(result) ? result : [result];
 
     for (const session of sessions) {
@@ -219,7 +395,9 @@ export const useCanDebugStore = create<CanDebugStore>((set, get) => ({
 
       // Listen for CAN data via extension IPC broadcast
       window.api.can.onData(sessionId, (frames: CanFrame[]) => {
-        bumpBusLoad(sessionId, frames.length);
+        const visibleFrames = frames.filter((frame) => !isPendingLocalTxEcho(sessionId, frame));
+        if (visibleFrames.length === 0) return;
+        bumpBusLoad(sessionId, visibleFrames.length);
         const blc = busLoadCounters.get(sessionId)!;
         const elapsed = Date.now() - blc.lastReset;
 
@@ -230,7 +408,7 @@ export const useCanDebugStore = create<CanDebugStore>((set, get) => ({
           const existing = msgs.get(sessionId) || [];
           const db = state.dbc;
 
-          const newRows: CanMessageRow[] = frames.map((f) => {
+          const newRows: CanMessageRow[] = visibleFrames.map((f) => {
             seq++;
             writeCanRecording(sessionId, f, seq);
             const msgDef = db ? db.messages.find((m) => m.id === f.id && m.extended === f.extended) : undefined;
@@ -244,7 +422,7 @@ export const useCanDebugStore = create<CanDebugStore>((set, get) => ({
           const allStats = new Map(state.messageStats);
           const sessionStats = new Map(allStats.get(sessionId) || new Map());
           const now = Date.now();
-          for (const f of frames) {
+          for (const f of visibleFrames) {
             const key = f.id;
             const prev = sessionStats.get(key);
             if (prev) {
@@ -281,7 +459,7 @@ export const useCanDebugStore = create<CanDebugStore>((set, get) => ({
 
           const monitored = state.monitoredSignals.map((ms) => {
             if (ms.sessionId !== sessionId) return ms;
-            const latestFrame = frames.findLast((f) => f.id === ms.messageId && f.extended === ms.extended);
+            const latestFrame = visibleFrames.findLast((f) => f.id === ms.messageId && f.extended === ms.extended);
             if (latestFrame) {
               const raw = extractRaw(latestFrame.data, ms.signal);
               const val = applySignedAndScale(raw, ms.signal);
@@ -303,13 +481,32 @@ export const useCanDebugStore = create<CanDebugStore>((set, get) => ({
           ),
         }));
       });
+
+      window.api.can.onBusError(sessionId, (info) => {
+        set((state) => ({
+          sessions: state.sessions.map((s) =>
+            s.id === sessionId ? { ...s, busError: info } : s
+          ),
+        }));
+      });
     }
   },
 
   closeDevice: (sessionId) => {
+    const ui = get().sessionUI.get(sessionId);
+    if (ui) {
+      for (const item of ui.sendList) {
+        const key = `${sessionId}:${item.id}`;
+        const h = sendListTimers.get(key);
+        if (h) { clearInterval(h); sendListTimers.delete(key); }
+        sendListInFlight.delete(key);
+      }
+    }
     window.api.can.close(sessionId);
     const handle = timerHandles.get(sessionId);
     if (handle) { clearInterval(handle); timerHandles.delete(sessionId); }
+    timerInFlight.delete(sessionId);
+    pendingTxEchoes.delete(sessionId);
     set((state) => ({
       sessions: state.sessions.map((s) =>
         s.id === sessionId ? { ...s, status: 'closed' as const } : s
@@ -322,9 +519,21 @@ export const useCanDebugStore = create<CanDebugStore>((set, get) => ({
     if (s && s.status === 'connected') window.api.can.close(sessionId);
     const handle = timerHandles.get(sessionId);
     if (handle) { clearInterval(handle); timerHandles.delete(sessionId); }
+    // Clean up all send list timers for this session
+    const ui = get().sessionUI.get(sessionId);
+    if (ui) {
+      for (const item of ui.sendList) {
+        const key = `${sessionId}:${item.id}`;
+        const h = sendListTimers.get(key);
+        if (h) { clearInterval(h); sendListTimers.delete(key); }
+        sendListInFlight.delete(key);
+      }
+    }
+    timerInFlight.delete(sessionId);
     const recId = activeRecordings.get(sessionId);
     if (recId) { window.api.recording.stop(recId); activeRecordings.delete(sessionId); }
     sessionStartTime.delete(sessionId);
+    pendingTxEchoes.delete(sessionId);
     set((state) => {
       const msgs = new Map(state.messages); msgs.delete(sessionId);
       const ui = new Map(state.sessionUI); ui.delete(sessionId);
@@ -384,7 +593,7 @@ export const useCanDebugStore = create<CanDebugStore>((set, get) => ({
     }));
   },
 
-  sendFrame: (sessionId) => {
+  sendFrame: async (sessionId) => {
     const ui = get().sessionUI.get(sessionId);
     if (!ui) return;
     const id = parseInt(ui.sendId, 16);
@@ -393,31 +602,11 @@ export const useCanDebugStore = create<CanDebugStore>((set, get) => ({
     const parsedBytes = ui.sendData.replace(/\s/g, '').match(/.{1,2}/g)?.map((h) => parseInt(h, 16)) || [];
     const maxLen = ui.sendFd ? fdNearestLength(dlc) : Math.min(dlc, 8);
     const dataBytes = [...parsedBytes.slice(0, maxLen), ...new Array(Math.max(0, maxLen - parsedBytes.length)).fill(0)];
-    window.api.can.send(sessionId, {
-      id, extended: ui.sendExtended, remote: false, dlc: maxLen, data: dataBytes,
-      timestamp: 0, direction: 'tx', fd: ui.sendFd || undefined, brs: ui.sendBrs || undefined,
-    });
-
     const txFrame: CanFrame = {
       id, extended: ui.sendExtended, remote: false, dlc: maxLen, data: dataBytes,
       timestamp: Date.now(), direction: 'tx', fd: ui.sendFd || undefined, brs: ui.sendBrs || undefined,
     };
-    bumpBusLoad(sessionId, 1);
-    set((state) => {
-      const msgs = new Map(state.messages);
-      const seqs = new Map(state.seqCounters);
-      let seq = seqs.get(sessionId) || 0; seq++;
-      const existing = msgs.get(sessionId) || [];
-      const db = state.dbc;
-      const msgDef = db ? db.messages.find((m) => m.id === txFrame.id && m.extended === txFrame.extended) : undefined;
-      const row: CanMessageRow = { seq, frame: txFrame, messageName: msgDef?.name };
-      writeCanRecording(sessionId, txFrame, seq);
-      const combined = [...existing, row];
-      msgs.set(sessionId, combined.length > MAX_MESSAGES ? combined.slice(-MAX_MESSAGES) : combined);
-      seqs.set(sessionId, seq);
-      return { messages: msgs, seqCounters: seqs };
-    });
-    updateBusLoadState(sessionId, set, get);
+    await transmitCanFrame(sessionId, txFrame, set, get);
   },
 
   startTimer: (sessionId) => {
@@ -425,25 +614,16 @@ export const useCanDebugStore = create<CanDebugStore>((set, get) => ({
     if (!ui) return;
     const ms = parseInt(ui.timerInterval, 10);
     if (isNaN(ms) || ms < 1) return;
-    get().sendFrame(sessionId);
-    const handle = setInterval(() => {
-      const st = get();
-      const s = st.sessions.find((ss) => ss.id === sessionId);
-      if (!s || s.status !== 'connected') {
-        clearInterval(timerHandles.get(sessionId)!);
-        timerHandles.delete(sessionId);
-        get().updateSessionUI(sessionId, { timerRunning: false });
-        return;
-      }
-      get().sendFrame(sessionId);
-    }, ms);
-    timerHandles.set(sessionId, handle);
-    get().updateSessionUI(sessionId, { timerRunning: true });
+    fallbackStartTimer(sessionId, ms, set, get);
   },
 
   stopTimer: (sessionId) => {
     const handle = timerHandles.get(sessionId);
-    if (handle) { clearInterval(handle); timerHandles.delete(sessionId); }
+    if (handle) {
+      clearInterval(handle);
+      timerHandles.delete(sessionId);
+    }
+    timerInFlight.delete(sessionId);
     get().updateSessionUI(sessionId, { timerRunning: false });
   },
 
@@ -480,6 +660,7 @@ export const useCanDebugStore = create<CanDebugStore>((set, get) => ({
     const key = `${sessionId}:${itemId}`;
     const h = sendListTimers.get(key);
     if (h) { clearInterval(h); sendListTimers.delete(key); }
+    sendListInFlight.delete(key);
     set((state) => {
       const ui = new Map(state.sessionUI);
       const prev = ui.get(sessionId) || defaultCanUI();
@@ -506,56 +687,18 @@ export const useCanDebugStore = create<CanDebugStore>((set, get) => ({
     const key = `${sessionId}:${itemId}`;
 
     if (item.enabled) {
+      // Stop
       const h = sendListTimers.get(key);
       if (h) { clearInterval(h); sendListTimers.delete(key); }
+      sendListInFlight.delete(key);
       get().updateSendListItem(sessionId, itemId, { enabled: false });
     } else {
-      const sendOne = () => {
-        const st = get();
-        const s = st.sessions.find((ss) => ss.id === sessionId);
-        if (!s || s.status !== 'connected') {
-          clearInterval(sendListTimers.get(key)!);
-          sendListTimers.delete(key);
-          get().updateSendListItem(sessionId, itemId, { enabled: false });
-          return;
-        }
-        const it = st.sessionUI.get(sessionId)?.sendList.find((i) => i.id === itemId);
-        if (!it) return;
-        const id = parseInt(it.canId, 16);
-        if (isNaN(id)) return;
-        const dataBytes = it.data.replace(/\s/g, '').match(/.{1,2}/g)?.map((h) => parseInt(h, 16)) || [];
-        const maxLen = it.fd ? fdNearestLength(it.dlc) : Math.min(it.dlc, 8);
-        const txFrame: CanFrame = {
-          id, extended: it.extended, remote: false,
-          dlc: maxLen, data: [...dataBytes.slice(0, maxLen), ...new Array(Math.max(0, maxLen - dataBytes.length)).fill(0)],
-          timestamp: Date.now(), direction: 'tx', fd: it.fd || undefined, brs: it.brs || undefined,
-        };
-        window.api.can.send(sessionId, txFrame);
-        bumpBusLoad(sessionId, 1);
-        set((state2) => {
-          const msgs = new Map(state2.messages);
-          const seqs = new Map(state2.seqCounters);
-          let seq = seqs.get(sessionId) || 0; seq++;
-          const existing = msgs.get(sessionId) || [];
-          const db = state2.dbc;
-          const msgDef = db ? db.messages.find((m) => m.id === txFrame.id && m.extended === txFrame.extended) : undefined;
-          const row: CanMessageRow = { seq, frame: txFrame, messageName: msgDef?.name };
-          writeCanRecording(sessionId, txFrame, seq);
-          const combined = [...existing, row];
-          msgs.set(sessionId, combined.length > MAX_MESSAGES ? combined.slice(-MAX_MESSAGES) : combined);
-          seqs.set(sessionId, seq);
-          return { messages: msgs, seqCounters: seqs };
-        });
-        updateBusLoadState(sessionId, set, get);
-      };
-      sendOne();
-      const h = setInterval(sendOne, item.intervalMs);
-      sendListTimers.set(key, h);
-      get().updateSendListItem(sessionId, itemId, { enabled: true });
+      // Start software timer
+      startSoftwareTimer(sessionId, itemId, key, set, get);
     }
   },
 
-  sendListItemOnce: (sessionId, itemId) => {
+  sendListItemOnce: async (sessionId, itemId) => {
     const st = get();
     const s = st.sessions.find((ss) => ss.id === sessionId);
     if (!s || s.status !== 'connected') return;
@@ -570,23 +713,7 @@ export const useCanDebugStore = create<CanDebugStore>((set, get) => ({
       id, extended: it.extended, remote: false, dlc: maxLen, data: dataBytes,
       timestamp: Date.now(), direction: 'tx', fd: it.fd || undefined, brs: it.brs || undefined,
     };
-    window.api.can.send(sessionId, txFrame);
-    bumpBusLoad(sessionId, 1);
-    set((state2) => {
-      const msgs = new Map(state2.messages);
-      const seqs = new Map(state2.seqCounters);
-      let seq = seqs.get(sessionId) || 0; seq++;
-      const existing = msgs.get(sessionId) || [];
-      const db = state2.dbc;
-      const msgDef = db ? db.messages.find((m) => m.id === txFrame.id && m.extended === txFrame.extended) : undefined;
-      const row: CanMessageRow = { seq, frame: txFrame, messageName: msgDef?.name };
-      writeCanRecording(sessionId, txFrame, seq);
-      const combined = [...existing, row];
-      msgs.set(sessionId, combined.length > MAX_MESSAGES ? combined.slice(-MAX_MESSAGES) : combined);
-      seqs.set(sessionId, seq);
-      return { messages: msgs, seqCounters: seqs };
-    });
-    updateBusLoadState(sessionId, set, get);
+    await transmitCanFrame(sessionId, txFrame, set, get);
   },
 
   replayAsc: (sessionId, content) => {

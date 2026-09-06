@@ -8,86 +8,68 @@ import FileManager from './components/FileManager';
 import TransferQueue from './components/TransferQueue';
 import ConnectionForm from './components/ConnectionForm';
 import ImportExportDialog from './components/ImportExportDialog';
-import ToastContainer from './components/Toast';
+import ToastContainer, { showToast } from './components/Toast';
 import CommandHistory from './components/CommandHistory';
 import CanDebugPanel from './components/CanDebugPanel';
 import SerialDebugPanel from './components/SerialDebugPanel';
 import NetDebugPanel from './components/NetDebugPanel';
-import EtherCATPanel from './components/EtherCATPanel';
-import { LicenseDialog } from './components/LicenseDialog';
+import { UpdateDialog } from './components/UpdateDialog';
 import { useLayoutStore } from './store/layout-store';
-import { useT } from './i18n';
-
+import { useI18nStore, useT } from './i18n';
+import { getUpdateText } from './update-text';
+import AppIcon, { type AppIconName } from './components/AppIcon';
 function WelcomeScreen({
   onSSH,
   onNet,
   onSerial,
   onCan,
-  onEthercat,
 }: {
   onSSH: () => void;
   onNet: () => void;
   onSerial: () => void;
   onCan: () => void;
-  onEthercat: () => void;
 }) {
   const t = useT();
+  const zh = useI18nStore((s) => s.locale === 'zh');
 
   const features = [
-    { emoji: '🖥', title: 'SSH', desc: t('welcome.ssh.desc'), color: '#3b82f6', onClick: onSSH },
-    { emoji: '🔌', title: 'Net', desc: t('welcome.net.desc'), color: '#10b981', onClick: onNet },
-    { emoji: '⚡', title: 'Serial', desc: t('welcome.serial.desc'), color: '#f59e0b', onClick: onSerial },
-    { emoji: '🚗', title: 'CAN', desc: t('welcome.can.desc'), color: '#ef4444', onClick: onCan },
-    { emoji: '⚙️', title: 'EtherCAT', desc: t('welcome.ecat.desc'), color: '#8b5cf6', onClick: onEthercat },
+    { icon: 'terminal', title: zh ? 'SSH 终端' : 'SSH terminal', desc: t('welcome.ssh.desc'), onClick: onSSH },
+    { icon: 'network', title: zh ? '网络调试' : 'Network', desc: t('welcome.net.desc'), onClick: onNet },
+    { icon: 'serial', title: zh ? '串口调试' : 'Serial port', desc: t('welcome.serial.desc'), onClick: onSerial },
+    { icon: 'can', title: 'CAN / CAN FD', desc: t('welcome.can.desc'), onClick: onCan },
   ];
 
   return (
-    <div className="flex-1 flex items-center justify-center overflow-hidden relative">
-      <div className="text-center relative z-10">
-        {/* Logo */}
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold tracking-tight mb-1" style={{ color: 'var(--color-text-primary)' }}>
-            XenoTerm
-          </h1>
-          <p className="text-xs tracking-wide" style={{ color: 'var(--color-text-dim)' }}>
-            {t('welcome.subtitle')}
-          </p>
+    <div className="welcome-screen">
+      <div className="welcome-content">
+        <div className="welcome-wordmark">
+          <span className="brand-mark"><AppIcon name="terminal" size={18} /></span>
+          XenoTerm
         </div>
-
-        {/* Feature cards */}
-        <div className="flex items-stretch justify-center gap-3 mb-8">
+        <h1>{zh ? '连接设备，专注调试。' : 'Connect. Explore. Build.'}</h1>
+        <p className="welcome-description">{zh
+          ? '从一次连接开始，让终端、文件和设备通信井然有序。'
+          : 'Your terminals, files and devices. One quiet place to work.'}</p>
+        <div className="welcome-section-label">
+          <span>{zh ? '开始工作' : 'Start a workspace'}</span>
+          <span>{zh ? '选择连接方式' : 'CHOOSE A CONNECTION'}</span>
+        </div>
+        <div className="tool-grid">
           {features.map((f) => (
-            <div key={f.title}
+            <button key={f.title}
+              aria-label={f.title}
               onClick={f.onClick}
-              className="group relative w-28 p-4 rounded-xl text-center transition-all duration-200 hover:scale-[1.04] cursor-pointer active:scale-[0.97]"
-              style={{
-                backgroundColor: 'var(--color-sidebar)',
-                border: '1px solid var(--color-border)',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-              }}>
-              <div className="w-9 h-9 rounded-lg flex items-center justify-center mx-auto mb-2.5 transition-transform group-hover:scale-110"
-                style={{ backgroundColor: `${f.color}15` }}>
-                <span className="text-lg">{f.emoji}</span>
-              </div>
-              <p className="text-[11px] font-semibold mb-1 whitespace-nowrap" style={{ color: 'var(--color-text-primary)' }}>{f.title}</p>
-              <p className="text-[9px] leading-snug whitespace-nowrap" style={{ color: 'var(--color-text-dim)' }}>{f.desc}</p>
-              <div className="absolute bottom-0 left-3 right-3 h-[2px] rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                style={{ backgroundColor: f.color }} />
-            </div>
+              className="tool-card">
+              <span className="tool-card-icon"><AppIcon name={f.icon as AppIconName} size={21} /></span>
+              <span><strong>{f.title}</strong><small>{f.desc}</small></span>
+              <AppIcon name="arrow" size={15} className="tool-card-arrow" />
+            </button>
           ))}
         </div>
 
-        {/* Hints */}
-        <div className="flex items-center justify-center gap-4 text-[10px]" style={{ color: 'var(--color-text-dim)' }}>
-          <span className="flex items-center gap-1">
-            <kbd className="px-1.5 py-0.5 rounded text-[9px] font-mono"
-              style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-border)' }}>
-              Dbl-click
-            </kbd>
-            {t('welcome.hint.dblclick')}
-          </span>
-          <span style={{ color: 'var(--color-border)' }}>|</span>
-          <span>{t('welcome.hint.toolbar')}</span>
+        <div className="welcome-hint">
+          <AppIcon name="terminal" size={14} />
+          <span>{zh ? '双击侧栏中已保存的设备，即可继续工作。' : 'Double-click a saved connection in the sidebar to pick up where you left off.'}</span>
         </div>
       </div>
     </div>
@@ -143,9 +125,14 @@ function PasswordPrompt({
 
 export default function App() {
   const t = useT();
+  const locale = useI18nStore((s) => s.locale);
+  const updateText = getUpdateText(locale);
   const loadAppConfig = useAppStore((s) => s.loadAppConfig);
   const loadHosts = useAppStore((s) => s.loadHosts);
   const loadCommandHistory = useAppStore((s) => s.loadCommandHistory);
+  const loadUpdateStatus = useAppStore((s) => s.loadUpdateStatus);
+  const setUpdateStatus = useAppStore((s) => s.setUpdateStatus);
+  const updateStatus = useAppStore((s) => s.updateStatus);
   const activeSessionId = useAppStore((s) => s.activeSessionId);
   const splitPaneVisible = useAppStore((s) => s.splitPaneVisible);
   const splitPaneRatio = useAppStore((s) => s.splitPaneRatio);
@@ -161,9 +148,7 @@ export default function App() {
   const [showCanPanel, setShowCanPanel] = useState(false);
   const [showSerialPanel, setShowSerialPanel] = useState(false);
   const [showNetPanel, setShowNetPanel] = useState(false);
-  const [showEthercatPanel, setShowEthercatPanel] = useState(false);
-  const [showLicense, setShowLicense] = useState(false);
-  const [licenseExpired, setLicenseExpired] = useState(false);
+  const [showUpdateDialog, setShowUpdateDialog] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
   const [sidePanelWidth, setSidePanelWidth] = useState(400);
   const [isDraggingSidePanel, setIsDraggingSidePanel] = useState(false);
@@ -181,11 +166,38 @@ export default function App() {
     loadAppConfig();
     loadHosts();
     loadCommandHistory();
-    // Check license on startup
-    window.api.license.getStatus().then((s) => {
-      if (s.expired && !s.licensed) setLicenseExpired(true);
-    }).catch(() => {});
-  }, [loadAppConfig, loadHosts, loadCommandHistory]);
+    loadUpdateStatus();
+  }, [loadAppConfig, loadHosts, loadCommandHistory, loadUpdateStatus]);
+
+  useEffect(() => {
+    const unsubscribe = window.api.update.onStatusChange((status) => {
+      setUpdateStatus(status);
+    });
+    return unsubscribe;
+  }, [setUpdateStatus]);
+
+  const previousUpdateStateRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!updateStatus) return;
+
+    const previousState = previousUpdateStateRef.current;
+    const currentState = updateStatus.state;
+    const version = updateStatus.downloadedVersion || updateStatus.availableVersion || '';
+
+    if (previousState !== currentState) {
+      if (currentState === 'available') {
+        showToast('info', updateText.toast.available.replace('{version}', version ? `v${version}` : ''));
+      } else if (currentState === 'not-available' && updateStatus.lastCheckManual) {
+        showToast('success', updateText.toast.none);
+      } else if (currentState === 'disabled' && updateStatus.lastCheckManual) {
+        showToast('error', updateStatus.error || updateText.toast.error);
+      } else if (currentState === 'error' && updateStatus.lastCheckManual) {
+        showToast('error', updateStatus.error || updateText.toast.error);
+      }
+    }
+
+    previousUpdateStateRef.current = currentState;
+  }, [updateStatus, updateText]);
 
   // Global listener for SFTP progress — must be at App level so it's always active
   const updateTransfer = useAppStore((s) => s.updateTransfer);
@@ -351,11 +363,10 @@ export default function App() {
             onEditConnection={(host: any) => { setEditingHost(host); setShowConnectionForm(true); }}
             onImportExport={() => setShowImportExport(true)}
             onConnect={handleConnect}
-            onNetPanel={() => { setShowNetPanel((v) => !v); setShowSerialPanel(false); setShowCanPanel(false); setShowEthercatPanel(false); }}
-            onSerialPanel={() => { setShowSerialPanel((v) => !v); setShowNetPanel(false); setShowCanPanel(false); setShowEthercatPanel(false); }}
-            onCanPanel={() => { setShowCanPanel((v) => !v); setShowNetPanel(false); setShowSerialPanel(false); setShowEthercatPanel(false); }}
-            onEthercatPanel={() => { setShowEthercatPanel((v) => !v); setShowNetPanel(false); setShowSerialPanel(false); setShowCanPanel(false); }}
-            onLicenseClick={() => setShowLicense(true)}
+            onNetPanel={() => { setShowNetPanel((v) => !v); setShowSerialPanel(false); setShowCanPanel(false); }}
+            onSerialPanel={() => { setShowSerialPanel((v) => !v); setShowNetPanel(false); setShowCanPanel(false); }}
+            onCanPanel={() => { setShowCanPanel((v) => !v); setShowNetPanel(false); setShowSerialPanel(false); }}
+            onUpdateClick={() => setShowUpdateDialog(true)}
           />
         }
       >
@@ -369,15 +380,12 @@ export default function App() {
               <SerialDebugPanel onClose={() => setShowSerialPanel(false)} />
             ) : showCanPanel ? (
               <CanDebugPanel onClose={() => setShowCanPanel(false)} />
-            ) : showEthercatPanel ? (
-              <EtherCATPanel onClose={() => setShowEthercatPanel(false)} />
             ) : (
               <WelcomeScreen
                 onSSH={() => { setEditingHost(null); setShowConnectionForm(true); }}
                 onNet={() => setShowNetPanel(true)}
                 onSerial={() => setShowSerialPanel(true)}
                 onCan={() => setShowCanPanel(true)}
-                onEthercat={() => setShowEthercatPanel(true)}
               />
             )}
           </div>
@@ -423,7 +431,7 @@ export default function App() {
             )}
 
             {/* Side panel for debug tools */}
-            {(showNetPanel || showSerialPanel || showCanPanel || showEthercatPanel) && (
+            {(showNetPanel || showSerialPanel || showCanPanel) && (
               <>
                 <div
                   onMouseDown={(e) => { e.preventDefault(); setIsDraggingSidePanel(true); }}
@@ -437,7 +445,6 @@ export default function App() {
                   {showNetPanel && <NetDebugPanel onClose={() => setShowNetPanel(false)} />}
                   {showSerialPanel && <SerialDebugPanel onClose={() => setShowSerialPanel(false)} />}
                   {showCanPanel && <CanDebugPanel onClose={() => setShowCanPanel(false)} />}
-                  {showEthercatPanel && <EtherCATPanel onClose={() => setShowEthercatPanel(false)} />}
                 </div>
               </>
             )}
@@ -495,44 +502,7 @@ export default function App() {
       )}
 
       <ToastContainer />
-      {showLicense && <LicenseDialog onClose={() => {
-        setShowLicense(false);
-        window.dispatchEvent(new Event('license-status-changed'));
-        // Re-check license after dialog closes (user may have activated)
-        window.api.license.getStatus().then((s) => {
-          setLicenseExpired(s.expired && !s.licensed);
-        }).catch(() => {});
-      }} />}
-
-      {/* Trial expired blocking overlay */}
-      {licenseExpired && !showLicense && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center"
-          style={{ backgroundColor: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)' }}>
-          <div className="text-center max-w-sm">
-            <div className="text-5xl mb-4">⏰</div>
-            <h2 className="text-lg font-bold mb-2" style={{ color: '#fff' }}>
-              {t('dialog.trialExpired.title')}
-            </h2>
-            <p className="text-xs mb-6 leading-relaxed" style={{ color: 'rgba(255,255,255,0.6)' }}>
-              {t('dialog.trialExpired.msg')}
-            </p>
-            <div className="flex flex-col gap-2">
-              <button
-                onClick={() => setShowLicense(true)}
-                className="px-6 py-2.5 text-xs rounded-lg text-white font-medium transition-opacity hover:opacity-90"
-                style={{ background: 'linear-gradient(135deg, var(--color-accent), #8b5cf6)' }}>
-                🔑 {t('dialog.trialExpired.buy')}
-              </button>
-              <button
-                onClick={() => window.close()}
-                className="px-6 py-1.5 text-[10px] rounded-lg transition-colors"
-                style={{ color: 'rgba(255,255,255,0.4)' }}>
-                {t('dialog.trialExpired.exit')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {showUpdateDialog && <UpdateDialog onClose={() => setShowUpdateDialog(false)} />}
     </>
   );
 }
